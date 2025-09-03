@@ -1,0 +1,5 @@
+fastapi[standard]
+websockets
+sqlmodel
+python-dotenv
+uvicorn
