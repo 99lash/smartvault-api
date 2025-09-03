@@ -12,14 +12,42 @@
   cd smartvault-api
 ```
 
-### Step 2: Install project dependencies `requirements.txt`
+### Step 2: Create and Activate a python virtual environment
+
+#### Step 2.1: Create virtual environment
+
+```bash
+  python -m venv .venv
+```
+
+#### Step 2.2 Activate virtual environment
+
+**Linux / MacOS**
+
+```bash
+  source .venv/bin/activate
+```
+
+**Windows (Powershell)**
+
+```bash
+  .venv\Scripts\Activate
+```
+
+### Step 3: Upgrade pip (optional but recommended)
+
+```bash
+  pip install --upgrade pip
+```
+
+### Step 4: Install project dependencies `requirements.txt`
 
 ```bash
   pip install -r requirements.txt
 ```
 
-### Step 3: Activate this project python virtual environment
+### Step 5: Run the development server
 
 ```bash
-  source .venv/bin/activate
+  uvicorn main:app --reload
 ```
