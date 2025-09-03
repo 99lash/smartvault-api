@@ -3,3 +3,4 @@ websockets
 sqlmodel
 python-dotenv
 uvicorn
+pymysql
