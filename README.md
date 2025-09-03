@@ -17,7 +17,7 @@
 #### Step 2.1: Create virtual environment
 
 ```bash
-  python -m venv .venv
+  python3 -m venv .venv
 ```
 
 #### Step 2.2 Activate virtual environment
