@@ -49,5 +49,5 @@
 ### Step 5: Run the development server
 
 ```bash
-  uvicorn main:app --reload
+  uvicorn app.main:app --reload
 ```
