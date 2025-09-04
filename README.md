@@ -51,3 +51,11 @@
 ```bash
   uvicorn app.main:app --reload
 ```
+
+### Recommended vscode extension
+- SQLite viewer (Florian Klampfer)
+
+### ENV config
+- choose only one DATABASE_URL and paste it inside the .env file
+- QUESTION: where's the .env file?
+- you gotta create it first, nikka!
