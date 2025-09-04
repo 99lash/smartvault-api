@@ -59,3 +59,8 @@
 - choose only one DATABASE_URL and paste it inside the .env file
 - QUESTION: where's the .env file?
 - you gotta create it first, knee gas!
+
+### End point testing
+```bash
+http://127.0.0.1:8000/docs
+```
