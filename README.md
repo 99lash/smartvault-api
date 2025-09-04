@@ -5,6 +5,7 @@
 - Python3
 - Basic familiarity with Backend Development
 
+### Project Configurations
 ### Step 1: Clone this repository
 
 ```bash
@@ -64,3 +65,5 @@
 ```bash
 http://127.0.0.1:8000/docs
 ```
+## Architecture
+For a detailed explanation of the project architecture, see [Architecture.md](Architecture.md).
