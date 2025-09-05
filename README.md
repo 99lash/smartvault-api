@@ -5,6 +5,7 @@
 - Python3
 - Basic familiarity with Backend Development
 
+### Project Configurations
 ### Step 1: Clone this repository
 
 ```bash
@@ -51,3 +52,18 @@
 ```bash
   uvicorn app.main:app --reload
 ```
+
+### Recommended vscode extension
+- SQLite viewer (Florian Klampfer)
+
+### ENV config
+- choose only one DATABASE_URL and paste it inside the .env file
+- QUESTION: where's the .env file?
+- you gotta create it first, knee gas!
+
+### End point testing
+```bash
+http://127.0.0.1:8000/docs
+```
+## Architecture
+For a detailed explanation of the project architecture, see [Architecture.md](Architecture.md).

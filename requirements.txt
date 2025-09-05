@@ -4,3 +4,4 @@ sqlmodel
 python-dotenv
 uvicorn
 pymysql
+passlib
