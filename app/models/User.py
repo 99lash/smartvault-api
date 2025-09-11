@@ -1,7 +1,10 @@
-from sqlmodel import Field
-from typing import Optional
+from sqlmodel import Field, Relationship
+from typing import Optional, List, TYPE_CHECKING
 import enum
 from .Model import Model # the -> `.` means same folder, the -> `Model` in `.Model` means open Model.py while the Model at the end of the import is the class name
+
+if TYPE_CHECKING:
+    from .Log import Log
 
 # ENUM UserRole
 # Enum in Python is still a class, just a special kind of class.
@@ -20,3 +23,6 @@ class User(Model, table=True):
     email: str = Field(index=True, unique=True, nullable=False)    # Defines a column named eamil.
     password_hash: str                                             # Defines a column named password_hash.
     role: UserRole = Field(default=UserRole.user, nullable=False)  # Defines a column named role.
+
+    # Relationships
+    logs: Optional[List["Log"]] = Relationship(back_populates="user")

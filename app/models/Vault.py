@@ -1,7 +1,10 @@
-from sqlmodel import Field
+from sqlmodel import Field, Relationship
+from typing import Optional, List, TYPE_CHECKING
 import enum
-from typing import Optional
 from .Model import Model  # base model with id
+
+if TYPE_CHECKING:
+    from .Log import Log
 
 # ENUM VaultStatus
 class VaultStatus(str, enum.Enum):
@@ -16,3 +19,6 @@ class Vault(Model, table=True):
     name: str = Field(nullable=False, unique=True)           # vault name
     location: Optional[str] = Field(default=None, nullable=True)  # optional location
     status: VaultStatus = Field(default=VaultStatus.locked, nullable=False)  # default status
+
+    # Relationships
+    logs: Optional[List["Log"]] = Relationship(back_populates="vault")
