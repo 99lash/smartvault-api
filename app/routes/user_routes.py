@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.services.user_service import UserService
-from app.schemas.User import UserCreate, UserLogin, UpdateUserRole
+from app.schemas.User import UserCreate, UserLogin, UpdateUserRole, UserRead
 
 # -----------------------------
 # FastAPI router for User endpoints
@@ -32,7 +32,7 @@ def create_user(payload: UserCreate, db: Session = Depends(get_db)):
 # -----------------------------
 # List all users
 # -----------------------------
-@router.get("/")
+@router.get("/", response_model=list[UserRead])
 def list_users(db: Session = Depends(get_db)):
     """
     Returns all users.
@@ -44,7 +44,7 @@ def list_users(db: Session = Depends(get_db)):
 # -----------------------------
 # Get a user by ID
 # -----------------------------
-@router.get("/{user_id}")
+@router.get("/{user_id}", response_model=UserRead)
 def get_user(user_id: int, db: Session = Depends(get_db)):
     """
     Fetch a single user by ID.
