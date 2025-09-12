@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.core.database import get_db
-from app.services.vault_service import VaultService
+from app.services.VaultService import VaultService
 from app.models.Vault import VaultStatus
 
 # -----------------------------

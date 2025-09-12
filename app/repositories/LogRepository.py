@@ -2,7 +2,7 @@ from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 from typing import List, Optional
 from .Repository import Repository
-from models.Log import Log, LogEventType
+from app.models.Log import Log, LogEventType
 
 
 class LogRepository(Repository):
