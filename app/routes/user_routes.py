@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.services.user_service import UserService
-from app.models.User import UserRole
+from app.schemas.User import UserCreate, UserLogin, UpdateUserRole
 
 # -----------------------------
 # FastAPI router for User endpoints
@@ -20,14 +20,14 @@ router = APIRouter(prefix="/users", tags=["users"])
 # Create a new user
 # -----------------------------
 @router.post("/")
-def create_user(username: str, email: str, password: str, db: Session = Depends(get_db)):
+def create_user(payload: UserCreate, db: Session = Depends(get_db)):
     """
     Creates a new user.
     - Password is hashed in the UserService.
     - Returns the created user object.
     """
     service = UserService(db)
-    return service.create_user(username, email, password)
+    return service.create_user(payload.username, payload.email, payload.password)
 
 # -----------------------------
 # List all users
@@ -60,14 +60,14 @@ def get_user(user_id: int, db: Session = Depends(get_db)):
 # Login endpoint
 # -----------------------------
 @router.post("/login")
-def login(username: str, password: str, db: Session = Depends(get_db)):
+def login(payload: UserLogin, db: Session = Depends(get_db)):
     """
     Verifies user credentials.
     - Returns 401 if login fails.
     - Returns a success message if login succeeds.
     """
     service = UserService(db)
-    if not service.verify_user_password(username, password):
+    if not service.verify_user_password(payload.username, payload.password):
         raise HTTPException(status_code=401, detail="Invalid credentials")
     return {"message": "Login successful"}
 
@@ -91,14 +91,14 @@ def delete_user(user_id: int, db: Session = Depends(get_db)):
 # Update a user's role (admin only)
 # -----------------------------
 @router.patch("/{user_id}/role")
-def update_user_role(user_id: int, role: UserRole, db: Session = Depends(get_db)):
+def update_user_role(user_id: int, payload: UpdateUserRole, db: Session = Depends(get_db)):
     """
     Update the role of a user.
     - Example: promote to 'admin' or demote to 'user'.
     - Raises 404 if user not found.
     """
     service = UserService(db)
-    user = service.update_user_role(user_id, role)
+    user = service.update_user_role(user_id, payload.role)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    return {"message": f"User {user_id} role updated to {role}"}
+    return {"message": f"User {user_id} role updated to {payload.role}"}
