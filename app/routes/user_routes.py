@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.core.database import get_db
-from app.services.user_service import UserService
 from app.schemas.User import UserCreate, UserLogin, UpdateUserRole, UserRead
+from app.services.UserService import UserService
 
 # -----------------------------
 # FastAPI router for User endpoints

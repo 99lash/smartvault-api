@@ -67,3 +67,17 @@ http://127.0.0.1:8000/docs
 ```
 ## Architecture
 For a detailed explanation of the project architecture, see [Architecture.md](Architecture.md).
+
+## to make your api accessible to other devices in the same network
+- Step 1: Start FastAPI with network access
+```bash
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+```
+- Step 2: Get your computer's IP address
+```bash
+ipconfig
+```
+**Result**: Your API is now accessible at:
+- Computer IP: 192.168.1.11
+- API Port: 8000
+- Full URL: http://192.168.1.11:8000

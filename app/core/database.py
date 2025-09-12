@@ -14,11 +14,14 @@ import os
 
 # Load variables from .env
 load_dotenv()
+print("Loaded .env file")
 
 # Get the database connection string
 DATABASE_URL = os.getenv("DATABASE_URL")
 if not DATABASE_URL:
     raise ValueError("DATABASE_URL is not set in environment variables")
+else:
+    print(f"DATABASE_URL configured: {DATABASE_URL.split('@')[0] if '@' in DATABASE_URL else DATABASE_URL[:20]}...")
 
 # Pick DB based on environment
 ENV = os.getenv("ENV", "dev")  # e.g., dev, test, prod
@@ -43,7 +46,13 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 # Initialize the database (only for dev / first run)
 def init_database():
-    SQLModel.metadata.create_all(engine)
+    try:
+        print("Initializing database...")
+        SQLModel.metadata.create_all(engine)
+        print("Database tables created successfully")
+    except Exception as e:
+        print(f"Database initialization failed: {e}")
+        raise
 
 # Dependency for FastAPI routes
 def get_db():

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.core.database import get_db
-from app.services.keypadpin_mngment_service  import KeypadPinsService
+from app.services.KeypadPinsService  import KeypadPinsService
 
 # -----------------------------
 # FastAPI router for KeypadPins endpoints
