@@ -5,6 +5,7 @@ from .Model import Model # the -> `.` means same folder, the -> `Model` in `.Mod
 
 if TYPE_CHECKING:
     from .Log import Log
+    from .NfcCard import NfcCard
 
 # ENUM UserRole
 # Enum in Python is still a class, just a special kind of class.
@@ -26,3 +27,4 @@ class User(Model, table=True):
 
     # Relationships
     logs: Optional[List["Log"]] = Relationship(back_populates="user")
+    nfc_cards: Optional[List["NfcCard"]] = Relationship(back_populates="user")
