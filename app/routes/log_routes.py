@@ -6,7 +6,7 @@ from app.core.database import get_db
 from app.services.LogService import LogService
 from datetime import datetime
 from app.models.Log import LogEventType
-
+from app.schemas.LogCreate import LogCreate
 # -----------------------------
 # FastAPI router for Log endpoints
 # -----------------------------
@@ -124,7 +124,6 @@ def create_log(
     log_data: LogCreate,
     db: Session = Depends(get_db)
 ):
-    from app.schemas.LogCreate import LogCreate
     service = LogService(db)
     new_log = service.create_log(
         vault_id=log_data.vault_id,
