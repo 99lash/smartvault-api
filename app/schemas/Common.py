@@ -6,4 +6,4 @@ T = TypeVar("T")
 class Response(BaseModel, Generic[T]):
     success: bool = True
     data: Optional[T] = None
-    message: Optional[str] = None
+    detail: Optional[str] = None
