@@ -278,8 +278,6 @@ class LogService:
             details=details,
             timestamp=datetime.utcnow()
         )
-    
-
 
     def validate_access_and_create_log(self, vault_id: int, details: str) -> Log | None:
         """

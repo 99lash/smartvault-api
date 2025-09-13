@@ -126,7 +126,7 @@ def storage_stats(db: Session = Depends(get_db)):
     return service.get_storage_stats()
 
 # -----------------------------
-# Test validation endpoint (HTTP for easy testing via /docs)
+# Test validation endpoint (HTTP for easy funciton testing via /docs)
 # -----------------------------
 @router.post("/validate-access")
 def validate_access(request: ValidateAccessRequest, db: Session = Depends(get_db)):
@@ -151,11 +151,8 @@ async def websocket_logs(websocket: WebSocket):
     try:
         while True:
             raw_data = await websocket.receive_text()
-            # --- DEBUG ---
-            print("Raw data received from ESP32:", raw_data)
-            # ----------------
             try:
-                # ✅ Validate incoming message against your existing schema
+                # Validate incoming message against existing schema
                 payload = LogCreate.model_validate_json(raw_data)
 
                 with SessionLocal() as db:
