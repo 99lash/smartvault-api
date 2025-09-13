@@ -7,7 +7,8 @@ class Repository:
         self.model = model
 
     def get_all(self):
-        return self.db.query(self.model).all()
+        # NOTE TO @XpnsiveSharks: filtered out na yung mga soft deleted users. Or should I create a separate repository method instead of `get_all()`?
+        return self.db.query(self.model).filter(self.model.deleted_at == None).all()
 
     def get_by_id(self, record_id: int):
         return self.db.query(self.model).filter(self.model.id == record_id).first()
