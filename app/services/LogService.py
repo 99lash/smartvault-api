@@ -255,14 +255,20 @@ class LogService:
             "storage_period_days": (sorted_logs[-1].timestamp - sorted_logs[0].timestamp).days
         }
         
-    def create_log(self, vault_id: Optional[int], event_type: LogEventType, user_id: Optional[int] = None, details: str = "") -> Log:
+    def create_log(
+    self, 
+    vault_id: Optional[int], 
+    event_type: Optional[LogEventType], 
+    user_id: Optional[int] = None, 
+    details: Optional[str] = None
+    ) -> Log | None:
         """
-        Create a generic log entry.
-        - vault_id: the vault related to the log (optional for system events)
-        - event_type: type of event (unlock, failed_attempt, tamper, alarm, etc.)
-        - user_id: user who triggered the event (optional for system logs)
-        - details: any extra context about the event
+        Create a generic log entry only if event_type and details are provided.
         """
+        if not event_type or not details:
+            # skip saving if either is missing
+            return None
+
         return self.repo.create(
             vault_id=vault_id,
             user_id=user_id,
@@ -270,4 +276,5 @@ class LogService:
             details=details,
             timestamp=datetime.utcnow()
         )
+
 

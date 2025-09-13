@@ -14,6 +14,7 @@ class LogEventType(str, enum.Enum):
     failed_attempt = "failed_attempt"
     tamper = "tamper"
     alarm = "alarm"
+    disconnected = "disconnected"
 
 # Log model
 class Log(Model, table=True):
