@@ -262,17 +262,13 @@ class LogService:
         }
         
     def create_log(
-    self, 
-    vault_id: Optional[int], 
-    event_type: Optional[LogEventType], 
-    user_id: Optional[int] = None, 
-    details: Optional[str] = None
-    ) -> Log | None:
+                    self, vault_id: Optional[int], event_type: Optional[LogEventType], 
+                    user_id: Optional[int] = None, details: Optional[str] = None) -> Log | None:
         """
         Create a generic log entry only if event_type and details are provided.
         """
         if not event_type or not details:
-            # skip saving if either is missing 
+            # skip saving if either is missing  
             return None
 
         return self.repo.create(
@@ -285,11 +281,7 @@ class LogService:
     
 
 
-    def validate_access_and_create_log(
-        self,
-        vault_id: int,
-        details: str
-    ) -> Log | None:
+    def validate_access_and_create_log(self, vault_id: int, details: str) -> Log | None:
         """
         Validate access via NFC UID or keypad PIN and create log if valid.
         Only creates log if a matching user with vault access is found.
