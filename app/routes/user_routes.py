@@ -70,7 +70,7 @@ def login(payload: UserLogin, db: Session = Depends(get_db)):
     """
     service = UserService(db)
     if not service.verify_user_password(payload.username, payload.password):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invalid credentials")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
     return Response(success=True, detail="Login successful")
 
 # -----------------------------
