@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.schemas.User import UserCreate, UserLogin, UpdateUserRole, UserRead
+from app.schemas.Common import Response
 from app.services.UserService import UserService
 
 # -----------------------------
@@ -19,7 +20,7 @@ router = APIRouter(prefix="/users", tags=["users"])
 # -----------------------------
 # Create a new user
 # -----------------------------
-@router.post("/")
+@router.post("/", response_model=Response[UserRead], status_code=status.HTTP_201_CREATED)
 def create_user(payload: UserCreate, db: Session = Depends(get_db)):
     """
     Creates a new user.
@@ -27,7 +28,8 @@ def create_user(payload: UserCreate, db: Session = Depends(get_db)):
     - Returns the created user object.
     """
     service = UserService(db)
-    return service.create_user(payload.username, payload.email, payload.password)
+    user  = service.create_user(payload.username, payload.email, payload.password)
+    return Response(success=True, data=user, detail='User created successfully.')
 
 # -----------------------------
 # List all users
@@ -53,13 +55,13 @@ def get_user(user_id: int, db: Session = Depends(get_db)):
     service = UserService(db)
     user = service.get_user_by_id(user_id)
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
     return user
 
 # -----------------------------
 # Login endpoint
 # -----------------------------
-@router.post("/login")
+@router.post("/login", response_model=Response)
 def login(payload: UserLogin, db: Session = Depends(get_db)):
     """
     Verifies user credentials.
@@ -68,13 +70,13 @@ def login(payload: UserLogin, db: Session = Depends(get_db)):
     """
     service = UserService(db)
     if not service.verify_user_password(payload.username, payload.password):
-        raise HTTPException(status_code=401, detail="Invalid credentials")
-    return {"message": "Login successful"}
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invalid credentials")
+    return Response(success=True, detail="Login successful")
 
 # -----------------------------
 # Soft delete a user
 # -----------------------------
-@router.delete("/{user_id}")
+@router.delete("/{user_id}", response_model=Response)
 def delete_user(user_id: int, db: Session = Depends(get_db)):
     """
     Soft deletes a user by ID.
@@ -84,13 +86,13 @@ def delete_user(user_id: int, db: Session = Depends(get_db)):
     service = UserService(db)
     user = service.delete_user(user_id)  # implement soft-delete in service/repo
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    return {"message": f"User {user_id} deleted successfully"}
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    return Response(success=True, detail=f"User {user_id} deleted successfully")
 
 # -----------------------------
 # Update a user's role (admin only)
 # -----------------------------
-@router.patch("/{user_id}/role")
+@router.patch("/{user_id}/role", response_model=Response)
 def update_user_role(user_id: int, payload: UpdateUserRole, db: Session = Depends(get_db)):
     """
     Update the role of a user.
@@ -100,5 +102,5 @@ def update_user_role(user_id: int, payload: UpdateUserRole, db: Session = Depend
     service = UserService(db)
     user = service.update_user_role(user_id, payload.role)
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    return {"message": f"User {user_id} role updated to {payload.role}"}
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    return Response(success=True, detail=f"User {user_id} role successfully updated to {payload.role}")    
