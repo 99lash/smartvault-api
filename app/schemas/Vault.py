@@ -1,5 +1,4 @@
 from sqlmodel import SQLModel
-from pydantic import EmailStr
 from datetime import datetime
 from typing import Optional
 from app.models.Vault import VaultStatus
