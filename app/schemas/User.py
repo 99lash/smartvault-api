@@ -2,6 +2,7 @@ from sqlmodel import SQLModel
 from pydantic import EmailStr
 from app.models.User import UserRole
 from datetime import datetime
+from typing import Optional
 
 # ----------------------------
 # User HTTP Request Schemas
@@ -31,8 +32,8 @@ class UserRead(SQLModel, table=False):
   # ** Example: i-uncomment mo password_hash property or tanggalin mo yung ibang properties.    
   role: UserRole
   created_at: datetime
-  updated_at: datetime | None
-  deleted_at: datetime | None
+  updated_at: Optional[datetime] = None
+  deleted_at: Optional[datetime] = None
   
   class Config: 
     from_attributes = True
