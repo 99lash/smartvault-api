@@ -4,6 +4,7 @@ from app.core.database import get_db
 from app.services.KeypadPinsService import KeypadPinsService
 from app.schemas.Common import Response
 from app.schemas.KeypadPin import KeypadPinCreate, KeypadPinAssign, KeypadPinRead
+from app.services.UserService import UserService
 # -----------------------------
 # FastAPI router for KeypadPins endpoints
 # -----------------------------
@@ -85,12 +86,18 @@ def assign_keypad_pin_to_user(payload: KeypadPinAssign, db: Session = Depends(ge
     """
     Assigns an existing keypad pin to a user.
     - Updates the `user_id` field.
-    - Raises 404 if pin not found.
+    - Raises 404 if pin or user not found.
     """
     keypadPinService = KeypadPinsService(db)
     pin = keypadPinService.assign_to_user(payload.pin_id, payload.user_id)
     if not pin:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Keypad Pin not found")
+
+    userService = UserService(db)
+    user = userService.get_user_by_id(payload.user_id)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    
     return Response(success=True, detail=f"Keypad Pin {payload.pin_id} assigned to user {payload.user_id}")
 
 
