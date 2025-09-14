@@ -10,7 +10,6 @@ class KeypadPinCreate(SQLModel, table=False):
   pin_code: str
 
 class KeypadPinAssign(SQLModel, table=False):
-  pin_id: int
   user_id: int
 
 # ----------------------------
