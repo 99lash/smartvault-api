@@ -1,66 +1,104 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import Optional, List
 from app.core.database import get_db
 from app.services.NfcCardService import NfcCardService
-from app.schemas.NfcCardCreate import NfcCardCreate
-from app.schemas.NfcCardResponse import NfcCardResponse
+from app.services.UserService import UserService
+from app.schemas.nfc_card import NfcCardCreate, NfcCardAssign, NfcCardRead
+from app.schemas.Response import Response
 
 router = APIRouter(prefix="/nfc-cards", tags=["NFC Cards"])
 
 # -----------------------------
 # Create a new NFC card
 # -----------------------------
-@router.post("/", response_model=NfcCardResponse)
-def create_nfc_card(card_data: NfcCardCreate, db: Session = Depends(get_db)):
+@router.post("/", response_model=Response[NfcCardRead], status_code=status.HTTP_201_CREATED)
+def create_nfc_card(payload: NfcCardCreate, db: Session = Depends(get_db)):
+    """
+    Creates a new nfc card record.
+    - Requires a NFC card uid 
+    - user_id is optional (can be None if unassigned) 
+    """
     service = NfcCardService(db)
-    return service.create_card(uid=card_data.uid, user_id=card_data.user_id)
+    nfcCard = service.create_card(uid=payload.uid, user_id=payload.user_id)
+    return Response(success=True, data=nfcCard, detail="NFC Card successfully created")
 
 # -----------------------------
 # Get all NFC cards
 # -----------------------------
-@router.get("/", response_model=List[NfcCardResponse])
+@router.get("/", response_model=List[NfcCardRead])
 def list_nfc_cards(db: Session = Depends(get_db)):
+    """
+    Returns all NFC cards.
+    - Could later exclude soft-deleted records.
+    """
     service = NfcCardService(db)
     return service.get_all_cards()
 
 # -----------------------------
 # Get NFC card by UID
 # -----------------------------
-@router.get("/uid/{uid}", response_model=NfcCardResponse)
+@router.get("/uid/{uid}", response_model=NfcCardRead)
 def get_card_by_uid(uid: str, db: Session = Depends(get_db)):
+    """
+    Fetch a single NFC card by UID.
+    - Raises 404 if not found.
+    """
     service = NfcCardService(db)
     card = service.get_card_by_uid(uid)
     if not card:
-        raise HTTPException(status_code=404, detail="NFC card not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="NFC card not found")
     return card
 
 # -----------------------------
 # Get all cards assigned to a user
 # -----------------------------
-@router.get("/user/{user_id}", response_model=List[NfcCardResponse])
+@router.get("/user/{user_id}", response_model=List[NfcCardRead])
 def get_cards_by_user(user_id: int, db: Session = Depends(get_db)):
+    """
+    Fetch user all NFC cards.
+    - Raises 404 if user not found.  
+    """
+    user = UserService(db).get_user_by_id(user_id)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
     service = NfcCardService(db)
     return service.get_cards_by_user(user_id)
 
 # -----------------------------
 # Assign card to user
 # -----------------------------
-@router.patch("/{card_id}/assign", response_model=NfcCardResponse)
-def assign_card_to_user(card_id: int, user_id: int, db: Session = Depends(get_db)):
-    service = NfcCardService(db)
-    card = service.assign_card_to_user(card_id, user_id)
+@router.patch("/{card_id}/assign", response_model=Response)
+def assign_card_to_user(card_id: int, payload: NfcCardAssign, db: Session = Depends(get_db)):
+    """
+    Assigns an existing NFC card to a user.
+    - Updates the `user_id` field.
+    - Raises 404 if NFC card or user not found.
+    """
+    userService = UserService(db)
+    user = userService.get_user_by_id(payload.user_id)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    
+    nfcCardService = NfcCardService(db)
+    card = nfcCardService.assign_card_to_user(card_id, payload.user_id)
     if not card:
-        raise HTTPException(status_code=404, detail="NFC card not found")
-    return card
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="NFC card not found")
+    
+    return Response(success=True, detail=f"NFC Card {card_id} assigned to user {payload.user_id}")
 
 # -----------------------------
 # Soft delete a NFC card
 # -----------------------------
-@router.delete("/{card_id}", response_model=NfcCardResponse)
+@router.delete("/{card_id}", response_model=Response)
 def delete_nfc_card(card_id: int, db: Session = Depends(get_db)):
+    """
+    Deletes an NFC card by ID.
+    - Soft deletes if the model has a deleted_at column.
+    - Raises 404 if not found.
+    """    
     service = NfcCardService(db)
     card = service.delete_card(card_id)
     if not card:
-        raise HTTPException(status_code=404, detail="NFC card not found")
-    return card
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="NFC card not found")
+    return Response(success=True, detail=f"NFC card {card_id} deleted successfully")
