@@ -2,8 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.services.KeypadPinsService import KeypadPinsService
-from app.schemas.Common import Response
-from app.schemas.KeypadPin import KeypadPinCreate, KeypadPinAssign, KeypadPinRead
+from app.schemas.Response import Response
+from app.schemas.keypad_pin import KeypadPinCreate, KeypadPinAssign, KeypadPinRead
 from app.services.UserService import UserService
 # -----------------------------
 # FastAPI router for KeypadPins endpoints
@@ -82,23 +82,23 @@ def get_keypad_pin_by_pin(pin_code: str, db: Session = Depends(get_db)):
 # Assign a keypad pin to a user
 # -----------------------------
 @router.patch("/{pin_id}/assign", response_model=Response)
-def assign_keypad_pin_to_user(payload: KeypadPinAssign, db: Session = Depends(get_db)):
+def assign_keypad_pin_to_user(pin_id: int, payload: KeypadPinAssign, db: Session = Depends(get_db)):
     """
     Assigns an existing keypad pin to a user.
     - Updates the `user_id` field.
     - Raises 404 if pin or user not found.
     """
-    keypadPinService = KeypadPinsService(db)
-    pin = keypadPinService.assign_to_user(payload.pin_id, payload.user_id)
-    if not pin:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Keypad Pin not found")
-
     userService = UserService(db)
     user = userService.get_user_by_id(payload.user_id)
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-    
-    return Response(success=True, detail=f"Keypad Pin {payload.pin_id} assigned to user {payload.user_id}")
+
+    keypadPinService = KeypadPinsService(db)
+    pin = keypadPinService.assign_to_user(pin_id, payload.user_id)
+    if not pin:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Keypad Pin not found")
+
+    return Response(success=True, detail=f"Keypad Pin {pin_id} assigned to user {payload.user_id}")
 
 
 # -----------------------------

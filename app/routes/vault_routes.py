@@ -2,8 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.services.VaultService import VaultService
-from app.schemas.Vault import VaultCreate, UpdateVaultStatus, VaultRead
-from app.schemas.Common import Response
+from app.schemas.vault import VaultCreate, UpdateVaultStatus, VaultRead
+from app.schemas.Response import Response
 # -----------------------------
 # FastAPI router for Vault endpoints
 # -----------------------------
