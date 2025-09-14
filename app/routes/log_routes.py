@@ -164,12 +164,35 @@ async def websocket_logs(websocket: WebSocket):
                             details=payload.details
                         )
                         if new_log:
-                            await websocket.send_json({"status": "ok", "event_type": new_log.event_type.value, "user_id": new_log.user_id})
+                            event_type_str = new_log.event_type.value
+                            status = "ok" if event_type_str == "unlock" else "no_access"
+                            await websocket.send_json({"status": status, "event_type": event_type_str})
                         else:
-                            await websocket.send_json({"status": "no_access", "message": "No matching user or unauthorized access"})
+                            # No user found, log as failed attempt
+                            new_log = service.log_failed_unlock_attempt(
+                                vault_id=payload.vault_id,
+                                user_id=None,
+                                reason=payload.details or "unknown"
+                            )
+                            await websocket.send_json({"status": "no_access", "event_type": "failed_attempt"})
+                    elif payload.event_type == LogEventType.failed_attempt and payload.details:
+                        # Direct failed attempt log
+                        new_log = service.log_failed_unlock_attempt(
+                            vault_id=payload.vault_id,
+                            user_id=None,
+                            reason=payload.details
+                        )
+                        await websocket.send_json({"status": "ok", "event_type": "failed_attempt"})
+                    elif payload.event_type == LogEventType.tamper and payload.details:
+                        # Direct tamper detection log
+                        new_log = service.log_tamper_detection(
+                            vault_id=payload.vault_id,
+                            sensor_data=payload.details
+                        )
+                        await websocket.send_json({"status": "ok", "event_type": "tamper"})
                     else:
                         # For other event types, use direct create
-                        new_log = service.create_log( 
+                        new_log = service.create_log(
                             vault_id=payload.vault_id,
                             event_type=payload.event_type,
                             user_id=None,  # Default for non-user events

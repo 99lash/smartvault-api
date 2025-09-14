@@ -164,16 +164,13 @@ class LogService:
         return self.repo.log_vault_unlock(vault_id=vault_id, user_id=user_id, details=details)
     
     def log_failed_unlock_attempt(self, vault_id: int, user_id: Optional[int] = None, 
-                                 reason: str = "invalid credentials") -> Log:
+                                 reason: str = "invalid credentials") -> Log: 
         """Log a failed unlock attempt with additional context"""
         details = f"Failure reason: {reason}"
         
         # Business logic: Check if this triggers a security alert
         if self.is_vault_under_attack(vault_id):
-            # Could trigger additional security measures here
-            details += " | SECURITY ALERT: Multiple failed attempts detected"
-        
-        return self.repo.log_failed_attempt(vault_id=vault_id, user_id=user_id, details=details)
+            return self.repo.log_failed_attempt(vault_id=vault_id, user_id=user_id, details=details)
     
     def log_tamper_detection(self, vault_id: int, sensor_data: str = "") -> Log:
         """Log tamper detection with sensor information"""
