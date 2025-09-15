@@ -1,6 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from typing import Optional
-from app.schemas.LogCreate import LogCreate
 from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.services.LogService import LogService
