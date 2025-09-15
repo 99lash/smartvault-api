@@ -6,6 +6,7 @@ from app.repositories.UserVaultRepository import UserVaultRepository
 from app.repositories.NfcCardRepository import NfcCardRepository
 from app.repositories.KeyPadPinsRepository import KeypadPinsRepository
 from app.models.Log import Log, LogEventType
+import json
 
 # -----------------------------
 # Service layer for Log logic
@@ -283,18 +284,52 @@ class LogService:
         Uses LogEventType.unlock for successful validation.
         """
         user_id = None
+        method_used = None
+        nfc = None
+        pin = None
         
-        # Determine input type
-        if ':' in details:
-            # Treat as NFC UID
-            nfc_card = self.nfc_repo.get_by_uid(details)
+        try:
+            data = json.loads(details)
+            if isinstance(data, dict):
+                nfc = data.get('nfc')
+                pin = data.get('pin')
+            else:
+                # Loaded to primitive (e.g., int from unquoted number), treat as legacy
+                legacy_value = str(data)
+                if legacy_value.startswith('NFC:'):
+                    nfc = legacy_value[4:]
+                elif legacy_value.startswith('PIN:'):
+                    pin = legacy_value[4:]
+                elif ':' in legacy_value:
+                    nfc = legacy_value
+                elif legacy_value.isdigit() and 4 <= len(legacy_value) <= 6:
+                    pin = legacy_value
+                else:
+                    raise ValueError("Invalid legacy format")
+        except (json.JSONDecodeError, ValueError):
+            # Fallback to legacy string format
+            if details.startswith('NFC:'):
+                nfc = details[4:]
+            elif details.startswith('PIN:'):
+                pin = details[4:]
+            elif ':' in details:
+                nfc = details
+            elif details.isdigit() and 4 <= len(details) <= 6:
+                pin = details
+        
+        # Validate NFC first if present
+        if nfc:
+            nfc_card = self.nfc_repo.get_by_uid(nfc)
             if nfc_card and nfc_card.user_id:
                 user_id = nfc_card.user_id
-        elif details.isdigit() and 4 <= len(details) <= 6:
-            # Treat as keypad PIN (4-6 digits)
-            pin_record = self.pin_repo.get_by_pin_code(details)
+                method_used = f"NFC: {nfc}"
+        
+        # If no NFC success, try PIN
+        if not user_id and pin:
+            pin_record = self.pin_repo.get_by_pin_code(pin)
             if pin_record and pin_record.user_id:
                 user_id = pin_record.user_id
+                method_used = f"PIN: {pin}"
         
         if not user_id:
             # No matching user found for the provided details
@@ -310,7 +345,7 @@ class LogService:
                 vault_id=vault_id,
                 user_id=user_id,
                 event_type=LogEventType.tamper,
-                details=details,
+                details=method_used,
                 timestamp=datetime.utcnow()
             )
         
@@ -319,6 +354,6 @@ class LogService:
             vault_id=vault_id,
             user_id=user_id,
             event_type=LogEventType.unlock,
-            details=details,
+            details=method_used,
             timestamp=datetime.utcnow()
         )

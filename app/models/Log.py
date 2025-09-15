@@ -16,6 +16,7 @@ class LogEventType(str, enum.Enum):
     alarm = "alarm"
     disconnected = "disconnected"
     lock = "lock"
+    access_granted = "access_granted"
 
 # Log model
 class Log(Model, table=True):
