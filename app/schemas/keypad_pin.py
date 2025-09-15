@@ -13,7 +13,7 @@ class KeypadPinAssign(SQLModel, table=False):
   user_id: int
 
 # ----------------------------
-# Keypad Pin HTTP Request Schemas
+# Keypad Pin HTTP Response Schemas
 # ----------------------------
 class KeypadPinRead(SQLModel, table=False):
   id: int
