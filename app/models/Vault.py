@@ -5,6 +5,7 @@ from .Model import Model  # base model with id
 
 if TYPE_CHECKING:
     from .Log import Log
+    from .UserVault import UserVault
 
 # ENUM VaultStatus
 class VaultStatus(str, enum.Enum):
@@ -22,3 +23,4 @@ class Vault(Model, table=True):
 
     # Relationships
     logs: Optional[List["Log"]] = Relationship(back_populates="vault")
+    user_vaults: Optional[List["UserVault"]] = Relationship(back_populates="vault")

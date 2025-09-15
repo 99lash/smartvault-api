@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, status
 from typing import Optional
 from sqlalchemy.orm import Session
 from app.core.database import get_db
@@ -10,6 +10,13 @@ from app.schemas.Response import Response
 from app.services.VaultService import VaultService
 from app.services.UserService import UserService
 from pydantic import BaseModel
+from app.core.database import SessionLocal
+from pydantic import BaseModel
+
+class ValidateAccessRequest(BaseModel):
+    vault_id: int
+    details: str
+
 # -----------------------------
 # FastAPI router for Log endpoints
 # -----------------------------
@@ -140,16 +147,85 @@ def storage_stats(db: Session = Depends(get_db)):
     service = LogService(db)
     return service.get_storage_stats()
 
-@router.post("/", response_model=Response[LogRead], status_code=status.HTTP_201_CREATED)
-def create_log(
-    log_data: LogCreate,
-    db: Session = Depends(get_db)
-):
+# -----------------------------
+# Test validation endpoint (HTTP for easy funciton testing via /docs)
+# -----------------------------
+@router.post("/validate-access")
+def validate_access(request: ValidateAccessRequest, db: Session = Depends(get_db)):
     service = LogService(db)
-    new_log = service.create_log(
-        vault_id=log_data.vault_id,
-        event_type=log_data.event_type,
-        user_id=log_data.user_id,
-        details=log_data.details
-    )
-    return Response(success=True, data=new_log, detail="Log has been created")
+    log = service.validate_access_and_create_log(vault_id=request.vault_id, details=request.details)
+    if log:
+        return {
+            "success": True,
+            "event_type": log.event_type.value,
+            "user_id": log.user_id,
+            "details": log.details
+        }
+    else:
+        return {"success": False, "message": "No log created - invalid details or no access"}
+
+# -----------------------------
+# WEBSOCKET ENDPOINTS
+# -----------------------------
+@router.websocket("/ws")
+async def websocket_logs(websocket: WebSocket):
+    await websocket.accept()
+    try:
+        while True:
+            raw_data = await websocket.receive_text()
+            try:
+                # Validate incoming message against existing schema
+                payload = LogCreate.model_validate_json(raw_data)
+
+                with SessionLocal() as db:
+                    service = LogService(db)
+                    if payload.event_type == LogEventType.unlock and payload.details:
+                        # For unlock attempts, validate access via NFC or PIN
+                        new_log = service.validate_access_and_create_log(
+                            vault_id=payload.vault_id,
+                            details=payload.details
+                        )
+                        if new_log:
+                            event_type_str = new_log.event_type.value
+                            status = "ok" if event_type_str == "unlock" else "no_access"
+                            await websocket.send_json({"status": status, "event_type": event_type_str})
+                        else:
+                            # No user found, log as failed attempt
+                            new_log = service.log_failed_unlock_attempt(
+                                vault_id=payload.vault_id,
+                                user_id=None,
+                                reason=payload.details or "unknown"
+                            )
+                            await websocket.send_json({"status": "no_access", "event_type": "failed_attempt"})
+                    elif payload.event_type == LogEventType.failed_attempt and payload.details:
+                        # Direct failed attempt log
+                        new_log = service.log_failed_unlock_attempt(
+                            vault_id=payload.vault_id,
+                            user_id=None,
+                            reason=payload.details
+                        )
+                        await websocket.send_json({"status": "ok", "event_type": "failed_attempt"})
+                    elif payload.event_type == LogEventType.tamper and payload.details:
+                        # Direct tamper detection log
+                        new_log = service.log_tamper_detection(
+                            vault_id=payload.vault_id,
+                            sensor_data=payload.details
+                        )
+                        await websocket.send_json({"status": "ok", "event_type": "tamper"})
+                    else:
+                        # For other event types, use direct create
+                        new_log = service.create_log(
+                            vault_id=payload.vault_id,
+                            event_type=payload.event_type,
+                            user_id=None,  # Default for non-user events
+                            details=payload.details,
+                        )
+                        if new_log:
+                            await websocket.send_json({"status": "ok", "event_type": new_log.event_type.value})
+                        else:
+                            await websocket.send_json({"status": "error", "message": "Invalid event_type or details"})
+
+            except Exception as e:
+                await websocket.send_json({"status": "error", "error": str(e)})
+    except WebSocketDisconnect:
+        print("WebSocket disconnected: /logs/ws")

@@ -2,10 +2,11 @@ from fastapi import FastAPI;
 from app.core.security import verify_password
 from app.core.database import init_database
 from app.routes.user_routes import router as user_router
-from app.routes.vault_routes import router as vault_router
+from app.routes.uservault_routes import router as vault_router
 from app.routes.keypadpin_routes import router as keypadpin_router
 from app.routes.log_routes import router as log_router
 from app.routes.nfccard_routes import router as nfccard_routes
+from app.routes.uservault_routes import router as uservault_router
 
 
 app = FastAPI(title='smartvault_api')
@@ -24,3 +25,4 @@ app.include_router(vault_router)
 app.include_router(keypadpin_router)
 app.include_router(log_router)
 app.include_router(nfccard_routes)
+app.include_router(uservault_router)

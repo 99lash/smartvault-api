@@ -2,6 +2,9 @@ from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 from typing import List, Optional, Dict
 from app.repositories.LogRepository import LogRepository
+from app.repositories.UserVaultRepository import UserVaultRepository
+from app.repositories.NfcCardRepository import NfcCardRepository
+from app.repositories.KeyPadPinsRepository import KeypadPinsRepository
 from app.models.Log import Log, LogEventType
 
 # -----------------------------
@@ -15,6 +18,9 @@ class LogService:
     def __init__(self, db: Session):
         # Initialize repository with a database session
         self.repo = LogRepository(db)
+        self.user_vault_repo = UserVaultRepository(db)
+        self.nfc_repo = NfcCardRepository(db)
+        self.pin_repo = KeypadPinsRepository(db)
         
     # --- Basic CRUD Operations ---
     
@@ -158,16 +164,13 @@ class LogService:
         return self.repo.log_vault_unlock(vault_id=vault_id, user_id=user_id, details=details)
     
     def log_failed_unlock_attempt(self, vault_id: int, user_id: Optional[int] = None, 
-                                 reason: str = "invalid credentials") -> Log:
+                                 reason: str = "invalid credentials") -> Log: 
         """Log a failed unlock attempt with additional context"""
         details = f"Failure reason: {reason}"
         
         # Business logic: Check if this triggers a security alert
         if self.is_vault_under_attack(vault_id):
-            # Could trigger additional security measures here
-            details += " | SECURITY ALERT: Multiple failed attempts detected"
-        
-        return self.repo.log_failed_attempt(vault_id=vault_id, user_id=user_id, details=details)
+            return self.repo.log_failed_attempt(vault_id=vault_id, user_id=user_id, details=details)
     
     def log_tamper_detection(self, vault_id: int, sensor_data: str = "") -> Log:
         """Log tamper detection with sensor information"""
@@ -255,14 +258,16 @@ class LogService:
             "storage_period_days": (sorted_logs[-1].timestamp - sorted_logs[0].timestamp).days
         }
         
-    def create_log(self, vault_id: Optional[int], event_type: LogEventType, user_id: Optional[int] = None, details: Optional[str] = None) -> Log:
+    def create_log(
+                    self, vault_id: Optional[int], event_type: Optional[LogEventType], 
+                    user_id: Optional[int] = None, details: Optional[str] = None) -> Log | None:
         """
-        Create a generic log entry.
-        - vault_id: the vault related to the log (optional for system events)
-        - event_type: type of event (unlock, failed_attempt, tamper, alarm, etc.)
-        - user_id: user who triggered the event (optional for system logs)
-        - details: any extra context about the event
+        Create a generic log entry only if event_type and details are provided.
         """
+        if not event_type or not details:
+            # skip saving if either is missing  
+            return None
+
         return self.repo.create(
             vault_id=vault_id,
             user_id=user_id,
@@ -271,3 +276,49 @@ class LogService:
             timestamp=datetime.utcnow()
         )
 
+    def validate_access_and_create_log(self, vault_id: int, details: str) -> Log | None:
+        """
+        Validate access via NFC UID or keypad PIN and create log if valid.
+        Only creates log if a matching user with vault access is found.
+        Uses LogEventType.unlock for successful validation.
+        """
+        user_id = None
+        
+        # Determine input type
+        if ':' in details:
+            # Treat as NFC UID
+            nfc_card = self.nfc_repo.get_by_uid(details)
+            if nfc_card and nfc_card.user_id:
+                user_id = nfc_card.user_id
+        elif details.isdigit() and 4 <= len(details) <= 6:
+            # Treat as keypad PIN (4-6 digits)
+            pin_record = self.pin_repo.get_by_pin_code(details)
+            if pin_record and pin_record.user_id:
+                user_id = pin_record.user_id
+        
+        if not user_id:
+            # No matching user found for the provided details
+            return None
+        
+        # Check if user has access to the vault
+        users_for_vault = self.user_vault_repo.get_users_for_vault(vault_id)
+        vault_user_ids = [user.id for user in users_for_vault]
+        
+        if user_id not in vault_user_ids:
+            # User does not have access to this vault - log as tamper
+            return self.repo.create(
+                vault_id=vault_id,
+                user_id=user_id,
+                event_type=LogEventType.tamper,
+                details=details,
+                timestamp=datetime.utcnow()
+            )
+        
+        # Valid access: create the log as unlock
+        return self.repo.create(
+            vault_id=vault_id,
+            user_id=user_id,
+            event_type=LogEventType.unlock,
+            details=details,
+            timestamp=datetime.utcnow()
+        )
