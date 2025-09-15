@@ -255,7 +255,7 @@ class LogService:
             "storage_period_days": (sorted_logs[-1].timestamp - sorted_logs[0].timestamp).days
         }
         
-    def create_log(self, vault_id: Optional[int], event_type: LogEventType, user_id: Optional[int] = None, details: Optional[str] = None) -> Log:
+    def create_log(self, vault_id: Optional[int], event_type: LogEventType, user_id: Optional[int] = None, details: str = "") -> Log:
         """
         Create a generic log entry.
         - vault_id: the vault related to the log (optional for system events)

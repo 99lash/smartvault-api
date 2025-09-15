@@ -1,5 +1,4 @@
 from sqlalchemy.orm import Session
-from sqlalchemy import func
 from datetime import datetime, timedelta
 from typing import List, Optional
 from .Repository import Repository
@@ -91,7 +90,7 @@ class LogRepository(Repository):
         """Get count of events by type for analytics"""
         cutoff_time = datetime.utcnow() - timedelta(hours=hours)
         
-        query = self.db.query(self.model.event_type, func.count(self.model.id)).filter(
+        query = self.db.query(self.model.event_type, self.db.func.count(self.model.id)).filter(
             self.model.timestamp >= cutoff_time
         )
         
