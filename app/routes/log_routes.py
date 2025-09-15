@@ -1,10 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
-from typing import Optional
+from typing import Optional, Dict
+from datetime import datetime, timedelta
 from app.schemas.LogCreate import LogCreate
 from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.services.LogService import LogService
-from datetime import datetime
 from app.models.Log import LogEventType
 from app.core.database import SessionLocal
 from pydantic import BaseModel
@@ -30,18 +30,6 @@ router = APIRouter(prefix="/logs", tags=["logs"])
 def list_logs(db: Session = Depends(get_db)):
     service = LogService(db)
     return service.get_all_logs()
-
-# -----------------------------
-# Get log by ID
-# -----------------------------
-@router.get("/{log_id}")
-def get_log(log_id: int, db: Session = Depends(get_db)):
-    service = LogService(db)
-    log = service.get_log_by_id(log_id)
-    if not log:
-        raise HTTPException(status_code=404, detail="Log not found")
-    return log
-
 # -----------------------------
 # Delete a log
 # -----------------------------
@@ -52,99 +40,10 @@ def delete_log(log_id: int, db: Session = Depends(get_db)):
     if not log:
         raise HTTPException(status_code=404, detail="Log not found")
     return {"message": f"Log {log_id} deleted successfully"}
-
-# -----------------------------
-# Vault logs & summary
-# -----------------------------
-@router.get("/vault/{vault_id}")
-def get_vault_logs(vault_id: int, db: Session = Depends(get_db)):
-    service = LogService(db)
-    return service.get_vault_logs(vault_id)
-
-@router.get("/vault/{vault_id}/summary")
-def get_vault_summary(vault_id: int, hours: int = 24, db: Session = Depends(get_db)):
-    service = LogService(db)
-    return service.get_vault_activity_summary(vault_id, hours)
-
-# -----------------------------
-# User logs & summary
-# -----------------------------
-@router.get("/user/{user_id}")
-def get_user_logs(user_id: int, db: Session = Depends(get_db)):
-    service = LogService(db)
-    return service.get_user_logs(user_id)
-
-@router.get("/user/{user_id}/summary")
-def get_user_summary(user_id: int, hours: int = 24, db: Session = Depends(get_db)):
-    service = LogService(db)
-    return service.get_user_activity_summary(user_id, hours)
-
-# -----------------------------
-# Security checks
-# -----------------------------
-@router.get("/vault/{vault_id}/alerts")
-def check_vault_alerts(vault_id: int, hours: int = 1, db: Session = Depends(get_db)):
-    service = LogService(db)
-    return service.check_security_alerts(vault_id, hours)
-
-@router.get("/vault/{vault_id}/attack")
-def is_vault_under_attack(vault_id: int, threshold: int = 5, minutes: int = 30, db: Session = Depends(get_db)):
-    service = LogService(db)
-    return {"under_attack": service.is_vault_under_attack(vault_id, threshold, minutes)}
-
-@router.get("/suspicious")
-def suspicious_report(hours: int = 24, db: Session = Depends(get_db)):
-    service = LogService(db)
-    return service.get_suspicious_activity_report(hours)
-
-# -----------------------------
-# Activity reports
-# -----------------------------
-@router.get("/report")
-def activity_report(start: datetime, end: datetime, vault_id: int | None = None, db: Session = Depends(get_db)):
-    service = LogService(db)
-    return service.get_activity_report(start, end, vault_id)
-
-@router.get("/paginated")
-def paginated_logs(page: int = 1, per_page: int = 20, vault_id: int | None = None,
-                   event_type: LogEventType | None = None, db: Session = Depends(get_db)):
-    service = LogService(db)
-    return service.get_paginated_logs(page, per_page, vault_id, event_type)
-
-# -----------------------------
-# Maintenance
-# -----------------------------
-@router.delete("/cleanup")
-def cleanup_old_logs(retention_days: int = 90, db: Session = Depends(get_db)):
-    service = LogService(db)
-    deleted = service.cleanup_old_logs(retention_days)
-    return {"message": f"Deleted {deleted} old logs"}
-
-@router.get("/stats")
-def storage_stats(db: Session = Depends(get_db)):
-    service = LogService(db)
-    return service.get_storage_stats()
-
-# -----------------------------
-# Test validation endpoint (HTTP for easy funciton testing via /docs)
-# -----------------------------
-@router.post("/validate-access")
-def validate_access(request: ValidateAccessRequest, db: Session = Depends(get_db)):
-    service = LogService(db)
-    log = service.validate_access_and_create_log(vault_id=request.vault_id, details=request.details)
-    if log:
-        return {
-            "success": True,
-            "event_type": log.event_type.value,
-            "user_id": log.user_id,
-            "details": log.details
-        }
-    else:
-        return {"success": False, "message": "No log created - invalid details or no access"}
-
 # -----------------------------
 # WEBSOCKET ENDPOINTS
 # -----------------------------
+
 @router.websocket("/ws")
 async def websocket_logs(websocket: WebSocket):
     await websocket.accept()
@@ -152,50 +51,99 @@ async def websocket_logs(websocket: WebSocket):
         while True:
             raw_data = await websocket.receive_text()
             try:
-                # Validate incoming message against existing schema
                 payload = LogCreate.model_validate_json(raw_data)
 
                 with SessionLocal() as db:
                     service = LogService(db)
+                    
                     if payload.event_type == LogEventType.unlock and payload.details:
-                        # For unlock attempts, validate access via NFC or PIN
-                        new_log = service.validate_access_and_create_log(
+                        # Clean up expired sessions first
+                        service.cleanup_expired_sessions()
+                        
+                        # Check if this might be a second factor for an existing session
+                        # Parse the credential to get user_id
+                        temp_user_id = service.extract_user_id_from_details(payload.details)
+                        
+                        if temp_user_id:
+                            session_key = service.get_session_key(payload.vault_id, temp_user_id)
+                            
+                            # If there's an active session, try second factor authentication
+                            if session_key in LogService.auth_sessions:
+                                log_entry, status = service.handle_second_factor(
+                                    vault_id=payload.vault_id,
+                                    details=payload.details
+                                )
+                                
+                                if status == 'unlock':
+                                    await websocket.send_json({
+                                        "status": "ok", 
+                                        "event_type": "unlock",
+                                        "user_id": log_entry.user_id if log_entry else None,
+                                        "message": "Dual authentication successful"
+                                    })
+                                    continue
+                                elif status == 'invalid_credentials':
+                                    await websocket.send_json({
+                                        "status": "invalid_credentials", 
+                                        "event_type": "failed_attempt",
+                                        "message": "Invalid second factor or same factor repeated"
+                                    })
+                                    continue
+                        
+                        # If not second factor, proceed with normal progressive auth
+                        log_entry, status = service.validate_progressive_access(
                             vault_id=payload.vault_id,
                             details=payload.details
                         )
-                        if new_log:
-                            event_type_str = new_log.event_type.value
-                            status = "ok" if event_type_str == "unlock" else "no_access"
-                            await websocket.send_json({"status": status, "event_type": event_type_str})
-                        else:
-                            # No user found, log as failed attempt
-                            new_log = service.log_failed_unlock_attempt(
-                                vault_id=payload.vault_id,
-                                user_id=None,
-                                reason=payload.details or "unknown"
-                            )
-                            await websocket.send_json({"status": "no_access", "event_type": "failed_attempt"})
+                        
+                        if status == 'unlock':
+                            await websocket.send_json({
+                                "status": "ok", 
+                                "event_type": "unlock",
+                                "user_id": log_entry.user_id if log_entry else None,
+                                "message": "Access granted"
+                            })
+                        elif status == 'pending':
+                            await websocket.send_json({
+                                "status": "pending", 
+                                "event_type": "pending",
+                                "user_id": log_entry.user_id if log_entry else None,
+                                "message": "First factor accepted, provide second factor"
+                            })
+                        elif status == 'no_access':
+                            await websocket.send_json({
+                                "status": "no_access", 
+                                "event_type": "tamper",
+                                "user_id": log_entry.user_id if log_entry else None,
+                                "message": "Access denied - insufficient permissions"
+                            })
+                        else:  # invalid_credentials
+                            await websocket.send_json({
+                                "status": "invalid_credentials", 
+                                "event_type": "failed_attempt",
+                                "message": "Invalid credentials"
+                            })
+                    
                     elif payload.event_type == LogEventType.failed_attempt and payload.details:
-                        # Direct failed attempt log
                         new_log = service.log_failed_unlock_attempt(
                             vault_id=payload.vault_id,
                             user_id=None,
                             reason=payload.details
                         )
                         await websocket.send_json({"status": "ok", "event_type": "failed_attempt"})
+                    
                     elif payload.event_type == LogEventType.tamper and payload.details:
-                        # Direct tamper detection log
                         new_log = service.log_tamper_detection(
                             vault_id=payload.vault_id,
                             sensor_data=payload.details
                         )
                         await websocket.send_json({"status": "ok", "event_type": "tamper"})
+                    
                     else:
-                        # For other event types, use direct create
                         new_log = service.create_log(
                             vault_id=payload.vault_id,
                             event_type=payload.event_type,
-                            user_id=None,  # Default for non-user events
+                            user_id=None,
                             details=payload.details,
                         )
                         if new_log:
@@ -205,5 +153,6 @@ async def websocket_logs(websocket: WebSocket):
 
             except Exception as e:
                 await websocket.send_json({"status": "error", "error": str(e)})
+                
     except WebSocketDisconnect:
         print("WebSocket disconnected: /logs/ws")
