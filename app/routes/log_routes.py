@@ -14,125 +14,115 @@ class ValidateAccessRequest(BaseModel):
     details: str
 
 # -----------------------------
-# FastAPI router for Log endpoints
+# router for Log endpoints
 # -----------------------------
-# Handles HTTP requests related to logs:
-# - list, fetch, delete
-# - summaries (vault & user)
-# - security alerts
-# - reports
+# Handles HTTP/WebSocket requests for log management and real-time authentication events.
+# - HTTP: CRUD operations for logs (list, delete)
+# - WebSocket: Real-time processing of unlock attempts, tamper detection, etc.
+# Delegates business logic to LogService for separation of concerns (SOC).
 router = APIRouter(prefix="/logs", tags=["logs"])
 
 # -----------------------------
-# Get all logs
+# HTTP Endpoints for Log Management
+# -----------------------------
+# Basic CRUD operations for retrieving and managing logs.
+
+# -----------------------------
+# Retrieve all log entries
 # -----------------------------
 @router.get("/")
 def list_logs(db: Session = Depends(get_db)):
+    """
+    Retrieve all log entries from the database.
+    
+    This endpoint provides a complete audit trail for all events.
+    
+    Args:
+        db (Session): Database session injected via dependency.
+        
+    Returns:
+        List[dict]: Serialized log records.
+    """
     service = LogService(db)
     return service.get_all_logs()
 # -----------------------------
-# Delete a log
+# Delete a specific log entry
 # -----------------------------
 @router.delete("/{log_id}")
 def delete_log(log_id: int, db: Session = Depends(get_db)):
+    """
+    Delete a log entry by its unique ID.
+    
+    Use this for administrative cleanup of audit logs (use cautiously in production).
+    
+    Args:
+        log_id (int): The ID of the log to delete.
+        db (Session): Database session.
+        
+    Returns:
+        dict: Confirmation message on success.
+        
+    Raises:
+        HTTPException: 404 if the log ID does not exist.
+    """
     service = LogService(db)
     log = service.delete_log(log_id)
     if not log:
         raise HTTPException(status_code=404, detail="Log not found")
     return {"message": f"Log {log_id} deleted successfully"}
 # -----------------------------
-# WEBSOCKET ENDPOINTS
+# WebSocket Endpoint for Real-Time Event Processing
 # -----------------------------
+# This endpoint handles streaming events from clients (e.g., Arduino devices) for
+# real-time authentication, logging, and status updates. Each message is processed
+# transactionally with a new DB session to ensure isolation.
 
 @router.websocket("/ws")
 async def websocket_logs(websocket: WebSocket):
-    await websocket.accept()
+    """
+    WebSocket endpoint for real-time log and authentication event processing.
+    
+    Listens for JSON payloads representing events (e.g., unlock attempts from NFC/PIN).
+    Validates, processes via LogService, and responds with status (e.g., "pending", "unlock").
+    Each message uses a fresh DB session for atomicity.
+    
+    Args:
+        websocket (WebSocket): Connected client (e.g., device sending credentials).
+    
+    Handles:
+        - Connection acceptance and message loop.
+        - Event dispatching based on payload.event_type.
+        - Graceful error handling and disconnection.
+    """
+    await websocket.accept()  # Accept the WebSocket connection
     try:
-        while True:
+        while True:  # Main message processing loop
+            # Receive raw text message from client
             raw_data = await websocket.receive_text()
             try:
+                # Parse and validate incoming payload against Pydantic schema
                 payload = LogCreate.model_validate_json(raw_data)
 
+                # Create a new DB session for this message to ensure isolation
                 with SessionLocal() as db:
-                    service = LogService(db)
+                    service = LogService(db)  # Instantiate service with session
                     
+                    # Dispatch based on event type
                     if payload.event_type == LogEventType.unlock and payload.details:
-                        # Clean up expired sessions first
-                        service.cleanup_expired_sessions()
-                        
-                        # Check if this might be a second factor for an existing session
-                        # Parse the credential to get user_id
-                        temp_user_id = service.extract_user_id_from_details(payload.details)
-                        
-                        if temp_user_id:
-                            session_key = service.get_session_key(payload.vault_id, temp_user_id)
-                            
-                            # If there's an active session, try second factor authentication
-                            if session_key in LogService.auth_sessions:
-                                log_entry, status = service.handle_second_factor(
-                                    vault_id=payload.vault_id,
-                                    details=payload.details
-                                )
-                                
-                                if status == 'unlock':
-                                    await websocket.send_json({
-                                        "status": "ok", 
-                                        "event_type": "unlock",
-                                        "user_id": log_entry.user_id if log_entry else None,
-                                        "message": "Dual authentication successful"
-                                    })
-                                    continue
-                                elif status == 'invalid_credentials':
-                                    await websocket.send_json({
-                                        "status": "invalid_credentials", 
-                                        "event_type": "failed_attempt",
-                                        "message": "Invalid second factor or same factor repeated"
-                                    })
-                                    continue
-                        
-                        # If not second factor, proceed with normal progressive auth
-                        log_entry, status = service.validate_progressive_access(
-                            vault_id=payload.vault_id,
-                            details=payload.details
-                        )
-                        
-                        if status == 'unlock':
-                            await websocket.send_json({
-                                "status": "ok", 
-                                "event_type": "unlock",
-                                "user_id": log_entry.user_id if log_entry else None,
-                                "message": "Access granted"
-                            })
-                        elif status == 'pending':
-                            await websocket.send_json({
-                                "status": "pending", 
-                                "event_type": "pending",
-                                "user_id": log_entry.user_id if log_entry else None,
-                                "message": "First factor accepted, provide second factor"
-                            })
-                        elif status == 'no_access':
-                            await websocket.send_json({
-                                "status": "no_access", 
-                                "event_type": "tamper",
-                                "user_id": log_entry.user_id if log_entry else None,
-                                "message": "Access denied - insufficient permissions"
-                            })
-                        else:  # invalid_credentials
-                            await websocket.send_json({
-                                "status": "invalid_credentials", 
-                                "event_type": "failed_attempt",
-                                "message": "Invalid credentials"
-                            })
+                        # Handle authentication/unlock requests (MFA support)
+                        await _handle_unlock_request(websocket, payload, service)
                     
                     elif payload.event_type == LogEventType.failed_attempt and payload.details:
+                        # Log explicit failed attempts (e.g., from client-side validation)
                         new_log = service.log_failed_unlock_attempt(
                             vault_id=payload.vault_id,
-                            user_id=None,
+                            user_id=None,  # Anonymous for failed attempts
                             reason=payload.details
                         )
                         await websocket.send_json({"status": "ok", "event_type": "failed_attempt"})
                     
                     elif payload.event_type == LogEventType.tamper and payload.details:
+                        # Log tamper or security events (e.g., sensor triggers)
                         new_log = service.log_tamper_detection(
                             vault_id=payload.vault_id,
                             sensor_data=payload.details
@@ -140,19 +130,120 @@ async def websocket_logs(websocket: WebSocket):
                         await websocket.send_json({"status": "ok", "event_type": "tamper"})
                     
                     else:
+                        # Generic log creation for unsupported or custom events
                         new_log = service.create_log(
                             vault_id=payload.vault_id,
                             event_type=payload.event_type,
-                            user_id=None,
+                            user_id=None,  # Default to anonymous
                             details=payload.details,
                         )
                         if new_log:
+                            # Confirm successful logging
                             await websocket.send_json({"status": "ok", "event_type": new_log.event_type.value})
                         else:
+                            # Invalid event - reject without logging
                             await websocket.send_json({"status": "error", "message": "Invalid event_type or details"})
 
             except Exception as e:
+                # Catch validation/parsing errors and respond with error status
                 await websocket.send_json({"status": "error", "error": str(e)})
                 
     except WebSocketDisconnect:
+        # Handle client disconnection gracefully
         print("WebSocket disconnected: /logs/ws")
+
+
+async def _handle_unlock_request(websocket: WebSocket, payload: LogCreate, service: LogService):
+    """
+    Handle unlock authentication requests via progressive MFA.
+    
+    First checks for pending sessions (second factor); otherwise, initiates new auth.
+    Uses service for validation/logging; maps results to client-friendly JSON responses.
+    
+    Args:
+        websocket (WebSocket): Client connection for sending responses.
+        payload (LogCreate): The unlock event payload with details (NFC/PIN).
+        service (LogService): Initialized service for auth logic.
+    
+    Flow:
+        1. Clean expired sessions.
+        2. Check for second factor (if session exists).
+        3. If first factor, validate and respond with status (unlock/pending/etc.).
+    """
+    # Clean up any expired sessions to maintain state hygiene
+    service.cleanup_expired_sessions()
+    
+    # Quick extract to check for potential second factor
+    temp_user_id = service.extract_user_id_from_details(payload.details)
+    
+    if temp_user_id:
+        # Possible second factor - generate session key for lookup
+        session_key = service.get_session_key(payload.vault_id, temp_user_id)
+        
+        # If there's an active session, try second factor authentication
+        if session_key in LogService.auth_sessions:
+            log_entry, status = service.handle_second_factor(
+                vault_id=payload.vault_id,
+                details=payload.details
+            )
+            
+            if status == 'unlock':
+                # Dual auth successful - grant access
+                await websocket.send_json({
+                    "status": "ok",
+                    "event_type": "unlock",
+                    "user_id": log_entry.user_id if log_entry else None,
+                    "message": "Dual authentication successful"
+                })
+                return
+            elif status == 'invalid_credentials':
+                # Second factor invalid or repeated - reject
+                await websocket.send_json({
+                    "status": "invalid_credentials",
+                    "event_type": "failed_attempt",
+                    "message": "Invalid second factor or same factor repeated"
+                })
+                return
+    
+    # No pending session or not second factor - treat as new/first factor attempt
+    log_entry, status = service.validate_progressive_access(
+        vault_id=payload.vault_id,
+        details=payload.details
+    )
+    
+    # Map authentication statuses to standardized JSON responses for client
+    response_map = {
+        'unlock': {
+            "status": "ok",
+            "event_type": "unlock",
+            "user_id": log_entry.user_id if log_entry else None,
+            "message": "Access granted"
+        },
+        'pending': {
+            "status": "pending",
+            "event_type": "pending",
+            "user_id": log_entry.user_id if log_entry else None,
+            "message": "First factor accepted, provide second factor"
+        },
+        'no_access': {
+            "status": "no_access",
+            "event_type": "tamper",
+            "user_id": log_entry.user_id if log_entry else None,
+            "message": "Access denied - insufficient permissions"
+        },
+        'invalid_credentials': {
+            "status": "invalid_credentials",
+            "event_type": "failed_attempt",
+            "message": "Invalid credentials"
+        }
+    }
+    
+    if status in response_map:
+        # Send predefined response based on auth outcome
+        await websocket.send_json(response_map[status])
+    else:
+        # Fallback for unexpected statuses (defensive programming)
+        await websocket.send_json({
+            "status": "error",
+            "message": f"Unknown status: {status}"
+        })
