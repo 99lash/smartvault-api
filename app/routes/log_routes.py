@@ -9,7 +9,6 @@ from app.schemas.log import LogCreate, LogRead, LogVaultSummaryRead, LogUserSumm
 from app.schemas.Response import Response
 from app.services.VaultService import VaultService
 from app.services.UserService import UserService
-from pydantic import BaseModel
 from app.core.database import SessionLocal
 from pydantic import BaseModel
 
