@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from app.schemas.LogCreate import LogCreate
 from sqlalchemy.orm import Session
 from app.core.database import get_db
-from app.services.LogService import LogService
+from app.services.Logs.LogService import LogService
 from app.models.Log import LogEventType
 from app.core.database import SessionLocal
 from pydantic import BaseModel
@@ -119,6 +119,7 @@ async def websocket_logs(websocket: WebSocket):
                             user_id=None,  # Anonymous for failed attempts
                             reason=payload.details
                         )
+                        service.clear_sessions_for_vault(payload.vault_id)
                         await websocket.send_json({"status": "ok", "event_type": "failed_attempt"})
                     
                     elif payload.event_type == LogEventType.tamper and payload.details:
@@ -127,6 +128,7 @@ async def websocket_logs(websocket: WebSocket):
                             vault_id=payload.vault_id,
                             sensor_data=payload.details
                         )
+                        service.clear_sessions_for_vault(payload.vault_id)
                         await websocket.send_json({"status": "ok", "event_type": "tamper"})
                     
                     else:
@@ -170,42 +172,6 @@ async def _handle_unlock_request(websocket: WebSocket, payload: LogCreate, servi
         2. Check for second factor (if session exists).
         3. If first factor, validate and respond with status (unlock/pending/etc.).
     """
-    # Clean up any expired sessions to maintain state hygiene
-    service.cleanup_expired_sessions()
-    
-    # Quick extract to check for potential second factor
-    temp_user_id = service.extract_user_id_from_details(payload.details)
-    
-    if temp_user_id:
-        # Possible second factor - generate session key for lookup
-        session_key = service.get_session_key(payload.vault_id, temp_user_id)
-        
-        # If there's an active session, try second factor authentication
-        if session_key in LogService.auth_sessions:
-            log_entry, status = service.handle_second_factor(
-                vault_id=payload.vault_id,
-                details=payload.details
-            )
-            
-            if status == 'unlock':
-                # Dual auth successful - grant access
-                await websocket.send_json({
-                    "status": "ok",
-                    "event_type": "unlock",
-                    "user_id": log_entry.user_id if log_entry else None,
-                    "message": "Dual authentication successful"
-                })
-                return
-            elif status == 'invalid_credentials':
-                # Second factor invalid or repeated - reject
-                await websocket.send_json({
-                    "status": "invalid_credentials",
-                    "event_type": "failed_attempt",
-                    "message": "Invalid second factor or same factor repeated"
-                })
-                return
-    
-    # No pending session or not second factor - treat as new/first factor attempt
     log_entry, status = service.validate_progressive_access(
         vault_id=payload.vault_id,
         details=payload.details
@@ -216,19 +182,16 @@ async def _handle_unlock_request(websocket: WebSocket, payload: LogCreate, servi
         'unlock': {
             "status": "ok",
             "event_type": "unlock",
-            "user_id": log_entry.user_id if log_entry else None,
             "message": "Access granted"
         },
         'pending': {
             "status": "pending",
             "event_type": "pending",
-            "user_id": log_entry.user_id if log_entry else None,
             "message": "First factor accepted, provide second factor"
         },
         'no_access': {
             "status": "no_access",
             "event_type": "tamper",
-            "user_id": log_entry.user_id if log_entry else None,
             "message": "Access denied - insufficient permissions"
         },
         'invalid_credentials': {
@@ -239,8 +202,24 @@ async def _handle_unlock_request(websocket: WebSocket, payload: LogCreate, servi
     }
     
     if status in response_map:
-        # Send predefined response based on auth outcome
-        await websocket.send_json(response_map[status])
+        resp = response_map[status].copy()
+        if status in ['unlock', 'pending']:
+            resp["user_id"] = log_entry.user_id if log_entry else None
+        else:
+            resp["user_id"] = None
+        
+        # Customize message for dual unlock
+        if status == 'unlock' and log_entry and 'DUAL' in log_entry.details:
+            resp["message"] = "Dual authentication successful"
+        
+        # Customize message for repeated factor
+        if status == 'invalid_credentials' and log_entry and "Same factor repeated" in log_entry.details:
+            resp["message"] = "Invalid second factor or same factor repeated"
+        
+        if status == 'invalid_credentials':
+            service.clear_sessions_for_vault(payload.vault_id)
+        
+        await websocket.send_json(resp)
     else:
         # Fallback for unexpected statuses (defensive programming)
         await websocket.send_json({
