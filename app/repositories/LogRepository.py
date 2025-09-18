@@ -46,7 +46,7 @@ class LogRepository(Repository):
         """Get logs within a specific date range, optionally filtered by vault"""
         query = self.db.query(self.model).filter(
             self.model.timestamp >= start_date,
-            self.model.timestamp <= end_date
+            self.model.timestamp <= end_date 
         )
         
         if vault_id:
