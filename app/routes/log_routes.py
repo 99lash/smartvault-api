@@ -1,6 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
-from typing import List
-from app.schemas.LogCreate import LogCreate
+from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, status
+from typing import List, Optional
+from datetime import datetime
+from app.schemas.log import LogCreate, LogRead, LogVaultSummaryRead, LogUserSummaryRead, LogVaultAttackRead, LogVaultSuspiciousRead, LogActivityReportRead, LogStatsRead
 from app.schemas.LogSchemas import WSQueryRequest, LogResponse
 from sqlalchemy.orm import Session
 from app.core.database import get_db
@@ -9,7 +10,15 @@ from app.services.Logs.LogQueryService import LogQueryService
 from app.websockets.LogWebSocketHandler import LogWebSocketHandler
 from app.websockets.QueryWebSocketHandler import QueryWebSocketHandler
 from app.models.Log import LogEventType
+from app.schemas.Response import Response
 from app.core.database import SessionLocal
+from pydantic import BaseModel
+from app.services.VaultService import VaultService
+from app.services.UserService import UserService
+
+class ValidateAccessRequest(BaseModel):
+    vault_id: int
+    details: str
 
 # -----------------------------
 # router for Log endpoints
@@ -28,7 +37,7 @@ router = APIRouter(prefix="/logs", tags=["logs"])
 # -----------------------------
 # Retrieve all log entries
 # -----------------------------
-@router.get("/")
+@router.get("/", response_model=list[LogRead])
 def list_logs(db: Session = Depends(get_db)):
     """
     Retrieve all log entries from the database.
@@ -43,10 +52,11 @@ def list_logs(db: Session = Depends(get_db)):
     """
     service = LogService(db)
     return service.get_all_logs()
+
 # -----------------------------
 # Delete a specific log entry
 # -----------------------------
-@router.delete("/{log_id}")
+@router.delete("/{log_id}", response_model=Response)
 def delete_log(log_id: int, db: Session = Depends(get_db)):
     """
     Delete a log entry by its unique ID.
@@ -66,8 +76,8 @@ def delete_log(log_id: int, db: Session = Depends(get_db)):
     service = LogService(db)
     log = service.delete_log(log_id)
     if not log:
-        raise HTTPException(status_code=404, detail="Log not found")
-    return {"message": f"Log {log_id} deleted successfully"}
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Log not found")
+    return Response(success=True, detail=f"Log {log_id} deleted successfully")
 
 @router.get("/vault/{vault_id}/filtered")
 def get_filtered_logs(

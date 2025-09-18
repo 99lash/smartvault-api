@@ -1,8 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app.core.database import get_db
-from app.services.KeypadPinsService  import KeypadPinsService
-
+from app.services.KeypadPinsService import KeypadPinsService
+from app.schemas.Response import Response
+from app.schemas.keypad_pin import KeypadPinCreate, KeypadPinAssign, KeypadPinRead
+from app.services.UserService import UserService
 # -----------------------------
 # FastAPI router for KeypadPins endpoints
 # -----------------------------
@@ -19,22 +21,22 @@ router = APIRouter(prefix="/keypad-pins", tags=["keypad_pins"])
 # -----------------------------
 # Create a new keypad pin
 # -----------------------------
-@router.post("/")
-def create_keypad_pin(pin_code: str, user_id: int | None = None, db: Session = Depends(get_db)):
+@router.post("/", response_model=Response[KeypadPinRead], status_code=status.HTTP_201_CREATED)
+def create_keypad_pin(payload: KeypadPinCreate, db: Session = Depends(get_db)):
     """
     Creates a new keypad pin record.
     - Requires a pin code (must be unique).
     - user_id is optional (can be None if unassigned).
     """
     service = KeypadPinsService(db)
-    pin = service.create_keypad_pin(pin_code=pin_code, user_id=user_id)
-    return pin
+    pin = service.create_keypad_pin(payload.pin_code, payload.user_id)
+    return Response(success=True, data=pin, detail="Pin created successfully")
 
 
 # -----------------------------
 # List all keypad pins
 # -----------------------------
-@router.get("/")
+@router.get("/", response_model=list[KeypadPinRead])
 def list_keypad_pins(db: Session = Depends(get_db)):
     """
     Returns all keypad pins.
@@ -47,7 +49,7 @@ def list_keypad_pins(db: Session = Depends(get_db)):
 # -----------------------------
 # Get a keypad pin by ID
 # -----------------------------
-@router.get("/{pin_id}")
+@router.get("/{pin_id}", response_model=KeypadPinRead)
 def get_keypad_pin(pin_id: int, db: Session = Depends(get_db)):
     """
     Fetch a single keypad pin by ID.
@@ -56,14 +58,14 @@ def get_keypad_pin(pin_id: int, db: Session = Depends(get_db)):
     service = KeypadPinsService(db)
     pin = service.get_keypad_pin_by_id(pin_id)
     if not pin:
-        raise HTTPException(status_code=404, detail="KeypadPin not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Keypad Pin not found")
     return pin
 
 
 # -----------------------------
 # Get a keypad pin by pin code
 # -----------------------------
-@router.get("/pin/{pin_code}")
+@router.get("/pin/{pin_code}", response_model=KeypadPinRead)
 def get_keypad_pin_by_pin(pin_code: str, db: Session = Depends(get_db)):
     """
     Fetch a keypad pin by its pin code.
@@ -72,31 +74,37 @@ def get_keypad_pin_by_pin(pin_code: str, db: Session = Depends(get_db)):
     service = KeypadPinsService(db)
     pin = service.get_keypad_pin_by_pin(pin_code)
     if not pin:
-        raise HTTPException(status_code=404, detail="KeypadPin not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Keypad Pin not found")
     return pin
 
 
 # -----------------------------
 # Assign a keypad pin to a user
 # -----------------------------
-@router.patch("/{pin_id}/assign")
-def assign_keypad_pin_to_user(pin_id: int, user_id: int, db: Session = Depends(get_db)):
+@router.patch("/{pin_id}/assign", response_model=Response)
+def assign_keypad_pin_to_user(pin_id: int, payload: KeypadPinAssign, db: Session = Depends(get_db)):
     """
     Assigns an existing keypad pin to a user.
     - Updates the `user_id` field.
-    - Raises 404 if pin not found.
+    - Raises 404 if pin or user not found.
     """
-    service = KeypadPinsService(db)
-    pin = service.assign_to_user(pin_id, user_id)
+    userService = UserService(db)
+    user = userService.get_user_by_id(payload.user_id)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    keypadPinService = KeypadPinsService(db)
+    pin = keypadPinService.assign_to_user(pin_id, payload.user_id)
     if not pin:
-        raise HTTPException(status_code=404, detail="KeypadPin not found")
-    return {"message": f"KeypadPin {pin_id} assigned to user {user_id}"}
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Keypad Pin not found")
+
+    return Response(success=True, detail=f"Keypad Pin {pin_id} assigned to user {payload.user_id}")
 
 
 # -----------------------------
 # Delete a keypad pin
 # -----------------------------
-@router.delete("/{pin_id}")
+@router.delete("/{pin_id}", response_model=Response)
 def delete_keypad_pin(pin_id: int, db: Session = Depends(get_db)):
     """
     Deletes a keypad pin by ID.
@@ -106,5 +114,5 @@ def delete_keypad_pin(pin_id: int, db: Session = Depends(get_db)):
     service = KeypadPinsService(db)
     pin = service.delete_keypad_pin(pin_id)
     if not pin:
-        raise HTTPException(status_code=404, detail="KeypadPin not found")
-    return {"message": f"KeypadPin {pin_id} deleted successfully"}
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Keypad Pin not found")
+    return Response(success=True, detail=f"Keypad Pin {pin_id} deleted successfully")

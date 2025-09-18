@@ -1,7 +1,7 @@
 from sqlmodel import SQLModel
-from typing import Optional
 from datetime import datetime
-from app.models.Vault import Vault, VaultStatus
+from typing import Optional
+from app.models.Vault import VaultStatus
 
 # ----------------------------
 # Vault HTTP Request Schemas
@@ -10,6 +10,9 @@ class VaultCreate(SQLModel, table=False):
     name: str
     location: Optional[str] = None
     status: Optional[VaultStatus] = VaultStatus.locked
+
+class UpdateVaultStatus(SQLModel, table=False):
+    status: VaultStatus
 
 # ----------------------------
 # Vault HTTP Response Schemas
@@ -22,6 +25,6 @@ class VaultRead(SQLModel, table=False):
     created_at: datetime
     updated_at: Optional[datetime] = None
     deleted_at: Optional[datetime] = None
-    
+
     class Config:
         from_attributes = True

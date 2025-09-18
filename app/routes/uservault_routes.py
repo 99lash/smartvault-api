@@ -2,10 +2,10 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List
 from app.core.database import get_db
-from app.schemas.Common import Response
-from app.schemas.UserVault import UserVaultCreate, UserVaultRead, UserVaultBulkCreate
-from app.schemas.Vault import VaultRead
-from app.schemas.User import UserRead
+from app.schemas.Response import Response
+from app.schemas.user_vault import UserVaultCreate, UserVaultRead, UserVaultBulkCreate
+from app.schemas.vault import VaultRead
+from app.schemas.user import UserRead
 from app.services.UserVaultService import UserVaultService
 
 # -----------------------------
