@@ -45,6 +45,14 @@ class LogService:
         self.security_policy = SecurityPolicy()
         self.auth_flow = AuthenticationFlow(self.validator, self.session_manager, self.access_controller, self.security_policy, self.repo)
 
+    def get_all_logs(self) -> List[Log]:
+        """Get all log entries"""
+        return self.repo.get_all()
+    
+    def delete_log(self, log_id: int) -> Log | None:
+        """Delete a log entry by ID"""
+        return self.repo.delete(log_id)
+
     def clear_sessions_for_vault(self, vault_id: int):
         """
         Clear authentication sessions for a specific vault to reset MFA state.
