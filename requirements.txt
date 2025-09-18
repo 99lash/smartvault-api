@@ -6,3 +6,4 @@ uvicorn
 pymysql
 passlib
 alembic
+python-jose[cryptography]
