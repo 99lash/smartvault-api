@@ -11,10 +11,13 @@ if TYPE_CHECKING:
 # ENUM for log event types
 class LogEventType(str, enum.Enum):
     unlock = "unlock"
+    lock = "lock"
     failed_attempt = "failed_attempt"
     tamper = "tamper"
     alarm = "alarm"
     disconnected = "disconnected"
+    need_other_factor = "need_other_factor"
+    access_granted = "access_granted"
 
 # Log model
 class Log(Model, table=True):

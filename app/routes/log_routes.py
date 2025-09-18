@@ -1,39 +1,53 @@
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, status
 from typing import Optional
+from app.schemas.log import LogCreate, LogRead, LogVaultSummaryRead, LogUserSummaryRead, LogVaultAttackRead, LogVaultSuspiciousRead, LogActivityReportRead, LogStatsRead
 from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.services.LogService import LogService
 from datetime import datetime
 from app.models.Log import LogEventType
-from app.schemas.log import LogCreate, LogRead, LogVaultSummaryRead, LogUserSummaryRead, LogVaultAttackRead, LogVaultSuspiciousRead, LogActivityReportRead, LogStatsRead
 from app.schemas.Response import Response
-from app.services.VaultService import VaultService
-from app.services.UserService import UserService
 from app.core.database import SessionLocal
 from pydantic import BaseModel
+from app.services.VaultService import VaultService
+from app.services.UserService import UserService
 
 class ValidateAccessRequest(BaseModel):
     vault_id: int
     details: str
 
 # -----------------------------
-# FastAPI router for Log endpoints
+# router for Log endpoints
 # -----------------------------
-# Handles HTTP requests related to logs:
-# - list, fetch, delete
-# - summaries (vault & user)
-# - security alerts
-# - reports
+# Handles HTTP/WebSocket requests for log management and real-time authentication events.
+# - HTTP: CRUD operations for logs (list, delete)
+# - WebSocket: Real-time processing of unlock attempts, tamper detection, etc.
+# Delegates business logic to LogService for separation of concerns (SOC).
 router = APIRouter(prefix="/logs", tags=["logs"])
 
 # -----------------------------
-# Get all logs
+# HTTP Endpoints for Log Management
+# -----------------------------
+# Basic CRUD operations for retrieving and managing logs.
+
+# -----------------------------
+# Retrieve all log entries
 # -----------------------------
 @router.get("/", response_model=list[LogRead])
 def list_logs(db: Session = Depends(get_db)):
+    """
+    Retrieve all log entries from the database.
+    
+    This endpoint provides a complete audit trail for all events.
+    
+    Args:
+        db (Session): Database session injected via dependency.
+        
+    Returns:
+        List[dict]: Serialized log records.
+    """
     service = LogService(db)
     return service.get_all_logs()
-
 # -----------------------------
 # Get log by ID
 # -----------------------------
@@ -50,6 +64,21 @@ def get_log(log_id: int, db: Session = Depends(get_db)):
 # -----------------------------
 @router.delete("/{log_id}", response_model=Response)
 def delete_log(log_id: int, db: Session = Depends(get_db)):
+    """
+    Delete a log entry by its unique ID.
+    
+    Use this for administrative cleanup of audit logs (use cautiously in production).
+    
+    Args:
+        log_id (int): The ID of the log to delete.
+        db (Session): Database session.
+        
+    Returns:
+        dict: Confirmation message on success.
+        
+    Raises:
+        HTTPException: 404 if the log ID does not exist.
+    """
     service = LogService(db)
     log = service.delete_log(log_id)
     if not log:
