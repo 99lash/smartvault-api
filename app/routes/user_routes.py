@@ -1,4 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordRequestForm
+from datetime import timedelta
 from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.schemas.user import UserCreate, UserLogin, UpdateUserRole, UserRead
@@ -27,6 +29,8 @@ def create_user(payload: UserCreate, db: Session = Depends(get_db)):
     - Password is hashed in the UserService.
     - Returns the created user object.
     """
+    # Di ko muna i-rerequire by admin role yung pag access dito baka sakaling wala kang user na may admin. 
+    # Pero by default dapat for admin access privilege ito.
     service = UserService(db)
     user  = service.create_user(payload.username, payload.email, payload.password)
     return Response(success=True, data=user, detail='User created successfully.')
@@ -35,7 +39,7 @@ def create_user(payload: UserCreate, db: Session = Depends(get_db)):
 # List all users
 # -----------------------------
 @router.get("/", response_model=list[UserRead])
-def list_users(db: Session = Depends(get_db)):
+def list_users(current_user = Depends(UserService.require_admin), db: Session = Depends(get_db)):
     """
     Returns all users.
     - Could be filtered later to exclude soft-deleted users.
@@ -47,7 +51,7 @@ def list_users(db: Session = Depends(get_db)):
 # Get a user by ID
 # -----------------------------
 @router.get("/{user_id}", response_model=UserRead)
-def get_user(user_id: int, db: Session = Depends(get_db)):
+def get_user(user_id: int, current_user = Depends(UserService.require_admin), db: Session = Depends(get_db)):
     """
     Fetch a single user by ID.
     - Raises 404 if user not found.
@@ -61,25 +65,34 @@ def get_user(user_id: int, db: Session = Depends(get_db)):
 # -----------------------------
 # Login endpoint
 # -----------------------------
-@router.post("/login", response_model=Response)
-def login(payload: UserLogin, db: Session = Depends(get_db)):
+@router.post("/login")
+def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     """
     Verifies user credentials.
     - Returns 401 if login fails.
     - Returns a success message if login succeeds.
     """
     service = UserService(db)
-    if not service.verify_user_password(payload.username, payload.password):
+    token = service.authenticate_user(form_data.username, form_data.password)
+    if not token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
-    return Response(success=True, detail="Login successful")
+    return {"access_token": token, "token_type": "bearer"}
+
+# -----------------------------
+# Get current user from token
+# -----------------------------
+@router.get("/test/me", response_model=UserRead)
+def get_me(current_user: UserRead = Depends(UserService.get_current_user)):
+    return current_user
 
 # -----------------------------
 # Soft delete a user
 # -----------------------------
 @router.delete("/{user_id}", response_model=Response)
-def delete_user(user_id: int, db: Session = Depends(get_db)):
+def delete_user(user_id: int, current_user = Depends(UserService.require_admin),db: Session = Depends(get_db)):
     """
     Soft deletes a user by ID.
+    - Admin role is required.
     - Updates a 'deleted_at' timestamp instead of removing the record.
     - Raises 404 if user not found.
     """
@@ -99,8 +112,10 @@ def update_user_role(user_id: int, payload: UpdateUserRole, db: Session = Depend
     - Example: promote to 'admin' or demote to 'user'.
     - Raises 404 if user not found.
     """
+    # Di ko muna i-rerequire by admin role yung pag access dito baka sakaling wala kang user na may admin. 
+    # Pero by default dapat for admin access privilege ito.
     service = UserService(db)
     user = service.update_user_role(user_id, payload.role)
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-    return Response(success=True, detail=f"User {user_id} role successfully updated to {payload.role}")    
+    return Response(success=True, detail=f"User {user_id} role successfully updated to {payload.role}")
