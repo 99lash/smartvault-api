@@ -26,7 +26,7 @@ class UserService:
         # Initialize repository with a database session
         self.repo = UserRepository(db)
 
-    # Create a new user with hashed password
+    # Create a new user with hashed password (Admin Privilege)
     def create_user(self, username: str, email: str, password: str, role: UserRole = UserRole.user) -> User:
         hashed_pw = hash_password(password)
         return self.repo.create(username=username, email=email, password_hash=hashed_pw, role=role)
@@ -36,6 +36,15 @@ class UserService:
         expire = datetime.utcnow() + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
         to_encode.update({"exp": expire})
         return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
+    def register_user(self, username: str, email: str, password: str, confirmPassword: str, role: UserRole = UserRole.user) -> User:
+        user = self.repo.get_by_username(username)
+        if user:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="User already exists")
+        if (password != confirmPassword):
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Password does not match")
+        hashed_pw = hash_password(password)
+        return self.repo.create(username=username, email=email, password_hash=hashed_pw, role=role)
 
     # Fetch a user by ID
     def get_user_by_id(self, user_id: int) -> User | None:

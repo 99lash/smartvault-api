@@ -3,7 +3,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 from datetime import timedelta
 from sqlalchemy.orm import Session
 from app.core.database import get_db
-from app.schemas.User import UserCreate, UserLogin, UpdateUserRole, UserRead
+from app.schemas.User import UserCreate,UserRegister, UserLogin, UpdateUserRole, UserRead
 from app.schemas.Common import Response
 from app.services.UserService import UserService
 
@@ -23,7 +23,8 @@ router = APIRouter(prefix="/users", tags=["users"])
 # Create a new user
 # -----------------------------
 @router.post("/", response_model=Response[UserRead], status_code=status.HTTP_201_CREATED)
-def create_user(payload: UserCreate, db: Session = Depends(get_db)):
+def create_user(payload: UserCreate, current_user = Depends(UserService.require_admin), db: Session = Depends(get_db)):
+    # Need admin role para makapag create.
     """
     Creates a new user.
     - Password is hashed in the UserService.
@@ -39,7 +40,7 @@ def create_user(payload: UserCreate, db: Session = Depends(get_db)):
 # List all users
 # -----------------------------
 @router.get("/", response_model=list[UserRead])
-def list_users(current_user = Depends(UserService.require_admin), db: Session = Depends(get_db)):
+def list_users(current_user = Depends(UserService.get_current_user), db: Session = Depends(get_db)):
     """
     Returns all users.
     - Could be filtered later to exclude soft-deleted users.
@@ -79,6 +80,23 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
     return {"access_token": token, "token_type": "bearer"}
 
 # -----------------------------
+# Get current user from token
+# -----------------------------
+
+
+@router.post('/register', response_model=Response[UserRead])
+def register(payload: UserRegister, db: Session = Depends(get_db)):
+    # New endpoint: /users/register (Tiyaka ko nalang gawan ng independent routes, services, etc)
+    """
+    Register a new user.
+    - Password is hashed in the UserService.
+    - Returns HTTP Status of 409 if user already exists.
+    - Returns HTTP Status of 422 if password & confirmPassword doesn't match.
+    - Returns the created user object.
+    """
+    service = UserService(db)
+    user  = service.register_user(payload.username, payload.email, payload.password, payload.confirmPassword)
+    return Response(success=True, data=user, detail='User registered successfully.')
 # Get current user from token
 # -----------------------------
 @router.get("/test/me", response_model=UserRead)
