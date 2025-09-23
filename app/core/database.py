@@ -63,3 +63,11 @@ def get_db():
         # After the route handler is done (whether it succeeded or raised an error), FastAPI ensures this cleanup code runs.
         # It closes the session and releases the connection back to the pool.
         db.close()
+
+# Scoped session for WebSocket (mirrors get_db for manual use)
+def get_db_ws():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()

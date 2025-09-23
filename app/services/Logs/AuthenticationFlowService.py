@@ -24,7 +24,7 @@ class AuthenticationFlow:
         3. Mixed mode: Server decides based on vault configuration
         
         Returns:
-            tuple[Log | None, str]: (log_entry, status)
+            tuple[Log | None, str]: (log_entry, status) 
             Status: 'unlock', 'pending', 'no_access', 'invalid_credentials'
         """
         # Clean up expired sessions first to ensure fresh state

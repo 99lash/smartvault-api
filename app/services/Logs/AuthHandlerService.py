@@ -1,6 +1,6 @@
 from typing import Dict, Optional
 from app.services.Logs.LogService import LogService
-from app.schemas.LogCreate import LogCreate
+from app.schemas.log import LogCreate
 from app.models.Log import Log
 
 class AuthHandlerService:
@@ -42,7 +42,7 @@ class AuthHandlerService:
                 "status": "invalid_credentials",
                 "event_type": "failed_attempt",
                 "message": "Invalid credentials"
-            }
+            } 
         }
         
         if status in response_map:

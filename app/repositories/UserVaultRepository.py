@@ -24,12 +24,17 @@ class UserVaultRepository(Repository):
         )
 
     def get_users_for_vault(self, vault_id: int):
-        return (
+        import logging
+        query = (
             self.db.query(User)
-            .join(self.model)
-            .filter(self.model.vault_id == vault_id)
-            .all()
+            .join(UserVault, User.id == UserVault.user_id)
+            .filter(UserVault.vault_id == vault_id)
         )
+        logging.info(f"get_users_for_vault query for vault {vault_id}: {str(query)}")
+        users = query.all()
+        user_ids = [u.id for u in users]
+        logging.info(f"get_users_for_vault for vault {vault_id}: found {len(users)} users, IDs: {user_ids}")
+        return users
 
     def has_access(self, user_id: int, vault_id: int):
         return self.get_by_user_and_vault(user_id, vault_id) is not None

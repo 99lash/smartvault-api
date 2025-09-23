@@ -11,6 +11,15 @@ class LogCreate(BaseModel):
     user_id: Optional[int] = Field(None, ge=1, description="The ID of the user who triggered the event (optional)")
     details: Optional[str] = Field(None, max_length=1000, description="Additional details about the event")
     
+    @field_validator("vault_id", mode="before")
+    def parse_vault_id(cls, v):
+        if isinstance(v, str):
+            try:
+                return int(v)
+            except ValueError:
+                raise ValueError("vault_id must be a valid integer")
+        return v
+    
     @field_validator("event_type", mode="before")
     def normalize_event_type(cls, v):
         if isinstance(v, str):

@@ -9,10 +9,21 @@ from app.routes.nfccard_routes import router as nfccard_routes
 from app.routes.uservault_routes import router as uservault_router
 
 
+from fastapi.middleware.cors import CORSMiddleware
+
 app = FastAPI(title='smartvault_api')
 
+# CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allow all origins in development; restrict in production
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 # Create all tables if they don't exist
-try:
+try: 
     init_database()
     print("Application startup: Database initialized successfully")
 except Exception as e:
@@ -26,3 +37,9 @@ app.include_router(keypadpin_router)
 app.include_router(log_router)
 app.include_router(nfccard_routes)
 app.include_router(uservault_router)
+
+
+from app.websockets.LogWebSocketHandler import LogWebSocketHandler
+
+from fastapi import WebSocket
+

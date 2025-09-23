@@ -138,9 +138,9 @@ class LogRepository(Repository):
         )
 
     def get_logs_with_pagination(
-        self, 
-        page: int = 1, 
-        per_page: int = 20, 
+        self,
+        page: int = 1,
+        per_page: int = 20,
         vault_id: Optional[int] = None,
         event_type: Optional[LogEventType] = None
     ) -> List[Log]:
@@ -159,6 +159,33 @@ class LogRepository(Repository):
             .order_by(self.model.timestamp.desc())
             .offset(offset)
             .limit(per_page)
+            .all()
+        )
+
+    def get_filtered_logs_by_vault(self, vault_id: int, prefixes: List[str]) -> List[Log]:
+        """
+        Get logs for a vault filtered by details prefixes (starts with any prefix).
+        
+        Args:
+            vault_id (int): Vault ID to filter by.
+            prefixes (List[str]): List of prefixes to match in details (e.g., ['Locked', 'Tamper']).
+            
+        Returns:
+            List[Log]: Matching logs ordered by timestamp descending.
+        """
+        if not prefixes:
+            return []
+        
+        from sqlalchemy import or_
+        like_filters = [self.model.details.like(f"{prefix}%") for prefix in prefixes]
+        
+        return (
+            self.db.query(self.model)
+            .filter(
+                self.model.vault_id == vault_id,
+                or_(*like_filters)
+            )
+            .order_by(self.model.timestamp.desc())
             .all()
         )
 

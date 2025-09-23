@@ -6,9 +6,13 @@ from fastapi import HTTPException, status, Depends
 from app.core.database import get_db
 from app.models.User import User, UserRole
 from datetime import datetime, timedelta
-from jose import JWTError, jwt
+from jose import JWTError, jwt as jose_jwt
+import jwt  # For pyjwt utilities like get_unverified_header
+import logging
 
-SECRET_KEY = "a699f178b8b83de7721314c70f2fdcd78f58a1a793a7c7ed1ce32c5e2dea348f"
+from app.core.config import settings
+
+SECRET_KEY = settings.JWT_SECRET
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
@@ -35,7 +39,7 @@ class UserService:
         to_encode = data.copy()
         expire = datetime.utcnow() + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
         to_encode.update({"exp": expire})
-        return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+        return jose_jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
     # Fetch a user by ID
     def get_user_by_id(self, user_id: int) -> User | None:
@@ -60,7 +64,11 @@ class UserService:
       # Authenticate and issue JWT
     def authenticate_user(self, username: str, password: str) -> str | None:
         user = self.repo.get_by_username(username)
-        if not user or not verify_password(password, user.password_hash):
+        if not user:
+            logging.warning(f"Login attempt failed: User '{username}' not found")
+            return None
+        if not verify_password(password, user.password_hash):
+            logging.warning(f"Login attempt failed: Invalid password for user '{username}'")
             return None
         access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
         return self.create_access_token(data={"sub": user.username}, expires_delta=access_token_expires)
@@ -75,16 +83,53 @@ class UserService:
             headers={"WWW-Authenticate": "Bearer"},
         )
         try:
-            payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+            payload = jose_jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
             username: str = payload.get("sub") # type: ignore
             if username is None:
                 raise credentials_exception
-        except JWTError:
+        except JWTError as e:
+            logging.error(f"JWT decode failed in get_current_user: {str(e)}")
+            logging.error(f"Token preview: {token[:50]}..." if token else "No token")
+            try:
+                header = jwt.get_unverified_header(token)
+                logging.error(f"JWT header: {header}")
+            except Exception as header_err:
+                logging.error(f"Header parse failed: {header_err}")
             raise credentials_exception
         
         repo = UserRepository(db)
         user = repo.get_by_username(username)
         if user is None:
+            raise credentials_exception
+        return user
+
+    @staticmethod
+    def validate_token(token: str, db: Session) -> User:
+        """
+        Manual token validation for non-Depends contexts (e.g., WebSocket).
+        Raises ValueError on failure.
+        """
+        credentials_exception = ValueError("Could not validate credentials")
+        try:
+            payload = jose_jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+            username: str = payload.get("sub")
+            if username is None:
+                raise credentials_exception
+        except JWTError as e:
+            logging.error(f"JWT decode failed: {str(e)}")
+            logging.error(f"Token preview: {token[:50]}..." if token else "No token")
+            try:
+                header = jwt.get_unverified_header(token)
+                logging.error(f"JWT header: {header}")
+            except Exception as header_err:
+                logging.error(f"Header parse failed: {header_err}")
+            raise credentials_exception
+        
+        repo = UserRepository(db)
+        user = repo.get_by_username(username)
+        print(f"WS validate_token: username '{username}', user found: {user is not None}, id: {user.id if user else None}")
+        if user is None:
+            logging.warning(f"WS validate_token: User not found for username '{username}'")
             raise credentials_exception
         return user
     

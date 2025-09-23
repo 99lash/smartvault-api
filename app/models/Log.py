@@ -6,7 +6,7 @@ from .Model import Model  # Base model with id
 
 if TYPE_CHECKING:
     from .Vault import Vault
-    from .User import User
+    from .User import User 
 
 # ENUM for log event types
 class LogEventType(str, enum.Enum):
@@ -18,6 +18,8 @@ class LogEventType(str, enum.Enum):
     disconnected = "disconnected"
     need_other_factor = "need_other_factor"
     access_granted = "access_granted"
+    connected = "connected"
+    
 
 # Log model
 class Log(Model, table=True):

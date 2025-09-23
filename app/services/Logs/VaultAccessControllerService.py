@@ -17,6 +17,11 @@ class VaultAccessController:
         Returns:
             bool: True if access granted, False otherwise.
         """
+        import logging
+        logging.info(f"Vault access check: user_id={user_id}, vault_id={vault_id}")
         users_for_vault: List[User] = self.user_vault_repo.get_users_for_vault(vault_id)
         vault_user_ids = [user.id for user in users_for_vault]
-        return user_id in vault_user_ids
+        logging.info(f"Vault {vault_id} users IDs: {vault_user_ids}")
+        has_access = user_id in vault_user_ids
+        logging.info(f"Access granted for user {user_id} to vault {vault_id}: {has_access}")
+        return has_access

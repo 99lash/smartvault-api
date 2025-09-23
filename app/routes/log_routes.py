@@ -10,11 +10,14 @@ from app.services.Logs.LogQueryService import LogQueryService
 from app.websockets.LogWebSocketHandler import LogWebSocketHandler
 from app.websockets.QueryWebSocketHandler import QueryWebSocketHandler
 from app.models.Log import LogEventType
+from app.models.User import User
 from app.schemas.Response import Response
 from app.core.database import SessionLocal
 from pydantic import BaseModel
 from app.services.VaultService import VaultService
 from app.services.UserService import UserService
+from app.services.Logs.VaultAccessControllerService import VaultAccessController
+from app.repositories.UserVaultRepository import UserVaultRepository
 
 class ValidateAccessRequest(BaseModel):
     vault_id: int
@@ -83,6 +86,7 @@ def delete_log(log_id: int, db: Session = Depends(get_db)):
 def get_filtered_logs(
     vault_id: int,
     prefixes: str = "DUAL,Tamper,Failure,Manual",
+    current_user: User = Depends(UserService.get_current_user),
     db: Session = Depends(get_db)
 ):
     """
@@ -94,6 +98,15 @@ def get_filtered_logs(
     Returns:
         List[dict]: Filtered and serialized logs, ordered by timestamp descending.
     """
+    # Check vault access
+    user_vault_repo = UserVaultRepository(db)
+    controller = VaultAccessController(user_vault_repo)
+    if not controller.check_access(current_user.id, vault_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No access to this vault"
+        )
+    
     prefix_list = [p.strip() for p in prefixes.split(",") if p.strip()]
     service = LogQueryService(db)
     logs = service.get_filtered_logs_by_vault(vault_id, prefix_list)
@@ -112,20 +125,34 @@ def get_filtered_logs(
 
 @router.websocket("/ws")
 async def websocket_logs(websocket: WebSocket):
+    print("Incoming WS connection to /logs/ws")
     """
     WebSocket endpoint for real-time log and authentication event processing.
-    
+
     Listens for JSON payloads representing events (e.g., unlock attempts from NFC/PIN).
     Validates, processes via services/handlers, and responds with status (e.g., "pending", "unlock").
     Each message uses a fresh DB session for atomicity.
-    
+
     Args:
         websocket (WebSocket): Connected client (e.g., device sending credentials).
     """
-    handler = LogWebSocketHandler(websocket)
-    await handler.handle_connection()
+    print("WS: Route function websocket_logs entered - before handler creation")
+    import logging
+    logging.info("WS: Route /logs/ws entered successfully")
 
-@router.websocket("/ws/query")
+    try:
+        handler = LogWebSocketHandler(websocket)
+        print("WS: Handler created successfully")
+        logging.info("WS: LogWebSocketHandler instantiated")
+        await handler.handle_connection()
+    except Exception as route_err:
+        print(f"WS: Exception in route function: {str(route_err)}")
+        import traceback
+        traceback.print_exc()
+        logging.error(f"WS route exception: {route_err} - traceback: {traceback.format_exc()}")
+        raise  # Re-raise to trigger 403 or close
+
+@router.websocket("/ws/query") 
 async def websocket_query_logs(websocket: WebSocket):
     """
     WebSocket endpoint for querying filtered logs.
