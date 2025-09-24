@@ -74,7 +74,7 @@ class UserService:
     def authenticate_user(self, username: str, password: str) -> str | None:
         user = self.repo.get_by_username(username)
         if not user:
-            logging.warning(f"Login attempt failed: User '{username}' not found")
+            logging.warning(f"Login attempt failed: User '{username}' not found") 
             return None
         if not verify_password(password, user.password_hash):
             logging.warning(f"Login attempt failed: Invalid password for user '{username}'")
@@ -150,3 +150,46 @@ class UserService:
                 detail="Admin access required"
             )
         return current_user
+
+    def get_users_sharing_vault_access(self, target_user_id: int, current_user: User) -> list[User]:
+        """
+        Get all users who share vault access with the specified user.
+
+        This method:
+        1. Verifies the current user has permission to view this information
+        2. Calls UserVaultService to get users sharing vault access
+        3. Handles authorization and error cases
+
+        Args:
+            target_user_id: The user ID to find shared vault access for
+            current_user: The currently authenticated user
+
+        Returns:
+            List of User objects who share vault access with the target user
+
+        Raises:
+            HTTPException: If current user lacks permission or target user doesn't exist
+        """
+        # For now, allow any authenticated user to view shared vault access
+        # In the future, you might want to restrict this to admins or users viewing their own data
+        if current_user.id != target_user_id and current_user.role != UserRole.admin:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You can only view vault access for yourself or as an admin"
+            )
+
+        # Verify the target user exists
+        target_user = self.get_user_by_id(target_user_id)
+        if not target_user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Target user not found"
+            )
+
+        # Import UserVaultService here to avoid circular imports
+        from app.services.UserVaultService import UserVaultService
+
+        vault_service = UserVaultService(self.db)
+        shared_users = vault_service.get_users_sharing_vault_access(target_user_id)
+
+        return shared_users
