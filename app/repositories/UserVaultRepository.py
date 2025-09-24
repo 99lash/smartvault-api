@@ -38,3 +38,36 @@ class UserVaultRepository(Repository):
 
     def has_access(self, user_id: int, vault_id: int):
         return self.get_by_user_and_vault(user_id, vault_id) is not None
+
+    def get_users_sharing_vault_access(self, user_id: int):
+        """
+        Get all users who share vault access with the specified user.
+        This finds all vaults the user has access to, then finds all other users
+        who have access to any of those same vaults.
+
+        Args:
+            user_id: The user ID to find shared vault access for
+
+        Returns:
+            List of User objects who share at least one vault with the specified user
+        """
+        # First, get all vaults the user has access to
+        user_vaults = self.get_vaults_for_user(user_id)
+
+        if not user_vaults:
+            return []
+
+        # Get vault IDs
+        vault_ids = [vault.id for vault in user_vaults]
+
+        # Find all users who have access to any of these vaults (excluding the original user)
+        shared_users = (
+            self.db.query(User)
+            .join(UserVault, User.id == UserVault.user_id)
+            .filter(UserVault.vault_id.in_(vault_ids))
+            .filter(User.id != user_id)  # Exclude the original user
+            .distinct()  # Remove duplicates
+            .all()
+        )
+
+        return shared_users 

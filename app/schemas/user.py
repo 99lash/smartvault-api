@@ -1,5 +1,4 @@
-from sqlmodel import SQLModel
-from pydantic import EmailStr
+from pydantic import EmailStr, BaseModel
 from app.models.User import UserRole
 from datetime import datetime
 from typing import Optional
@@ -7,23 +6,29 @@ from typing import Optional
 # ----------------------------
 # User HTTP Request Schemas
 # ----------------------------
-class UserCreate(SQLModel, table=False):
+class UserCreate(BaseModel):
   username: str
   email: EmailStr
   password: str
 
-class UserLogin(SQLModel, table=False):
+class UserLogin(BaseModel):
   username: str
   password: str
 
-class UpdateUserRole(SQLModel, table=False):
+class UpdateUserRole(BaseModel):
   role: UserRole
 
+class UserRegister(BaseModel):
+   username: str
+   email: EmailStr
+   password: str
+   confirmPassword: str
+   role: UserRole = UserRole.user
 
 # ----------------------------
 # User HTTP Response Schemas
 # ----------------------------
-class UserRead(SQLModel, table=False):
+class UserRead(BaseModel):
   id: int
   username: str
   email: EmailStr
