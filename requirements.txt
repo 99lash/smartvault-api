@@ -10,3 +10,4 @@ alembic
 python-jose[cryptography]
 PyJWT
 pydantic-settings
+

@@ -94,7 +94,7 @@ class UserVaultService:
     def get_users_sharing_vault_access(self, user_id: int) -> List[User]:
         """
         Get all users who share vault access with the specified user.
-
+ 
         This method:
         1. Verifies the user exists
         2. Finds all vaults the user has access to
