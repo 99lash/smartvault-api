@@ -96,7 +96,7 @@ def register(payload: UserRegister, db: Session = Depends(get_db)):
     """
     service = UserService(db)
     user  = service.register_user(payload.username, payload.email, payload.password, payload.confirmPassword, payload.role)
-    return Response(success=True, data=user, detail='User registered successfully.')
+    return Response(success=True, data=user, detail='User registered successfully.') 
 # Get current user from token
 # -----------------------------
 @router.get("/test/me", response_model=UserRead)
@@ -130,10 +130,47 @@ def update_user_role(user_id: int, payload: UpdateUserRole, db: Session = Depend
     - Example: promote to 'admin' or demote to 'user'.
     - Raises 404 if user not found.
     """
-    # Di ko muna i-rerequire by admin role yung pag access dito baka sakaling wala kang user na may admin. 
+    # Di ko muna i-rerequire by admin role yung pag access dito baka sakaling wala kang user na may admin.
     # Pero by default dapat for admin access privilege ito.
     service = UserService(db)
     user = service.update_user_role(user_id, payload.role)
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
     return Response(success=True, detail=f"User {user_id} role successfully updated to {payload.role}")
+
+# -----------------------------
+# Get users sharing vault access
+# -----------------------------
+@router.get("/vault/{user_id}", response_model=list[UserRead])
+def get_users_sharing_vault_access(user_id: int, current_user: UserRead = Depends(UserService.get_current_user), db: Session = Depends(get_db)):
+    """
+    Get all users who share vault access with the specified user.
+
+    This endpoint:
+    1. Finds all vaults the specified user has access to
+    2. Returns all other users who have access to any of those same vaults
+    3. Requires authentication and proper authorization
+
+    Args:
+        user_id: The user ID to find shared vault access for
+        current_user: The currently authenticated user (injected by dependency)
+
+    Returns:
+        List of UserRead objects representing users who share vault access
+
+    Raises:
+        403 Forbidden: If current user lacks permission to view this information
+        404 Not Found: If the target user doesn't exist
+        500 Internal Server Error: If there's a database or server error
+    """
+    service = UserService(db)
+    try:
+        shared_users = service.get_users_sharing_vault_access(user_id, current_user)
+        return shared_users
+    except HTTPException:
+        raise  # Re-raise HTTP exceptions as-is
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error retrieving users sharing vault access: {str(e)}"
+        )
