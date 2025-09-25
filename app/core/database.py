@@ -8,20 +8,34 @@ from sqlalchemy.orm import sessionmaker
 
 # python-dotenv loads environment variables from a .env file
 from dotenv import load_dotenv
+from pathlib import Path
 
 # os lets us read environment variables
 import os
 
-# Load variables from .env
-load_dotenv()
-print("Loaded .env file")
+# Load variables from .env (ensure correct path when running under reloader subprocess)
+# Resolve project root: this file -> app/core/database.py → project root is two levels up
+project_root = Path(__file__).resolve().parents[2]
+dotenv_path = project_root / ".env"
 
-# Get the database connection string
+# Load from explicit path first, then fall back to default search
+loaded = False
+if dotenv_path.exists():
+    loaded = load_dotenv(dotenv_path=str(dotenv_path), override=False)
+else:
+    loaded = load_dotenv()
+
+print(f"Loaded .env file: path={'project_root/.env' if dotenv_path.exists() else 'default search'} loaded={loaded}")
+
+# Get the database connection string (first pass)
 DATABASE_URL = os.getenv("DATABASE_URL")
 if not DATABASE_URL:
-    raise ValueError("DATABASE_URL is not set in environment variables")
-else:
-    print(f"DATABASE_URL configured: {DATABASE_URL.split('@')[0] if '@' in DATABASE_URL else DATABASE_URL[:20]}...")
+    # Provide a robust default pointing to a SQLite DB at project root
+    default_sqlite_path = (project_root / "smartvault.db").resolve().as_posix()
+    DATABASE_URL = f"sqlite:///{default_sqlite_path}"
+    # Also set it into environment so subsequent getenv calls see it
+    os.environ["DATABASE_URL"] = DATABASE_URL
+print(f"DATABASE_URL configured: {DATABASE_URL.split('@')[0] if '@' in DATABASE_URL else DATABASE_URL[:50]}...")
 
 # Pick DB based on environment
 ENV = os.getenv("ENV", "dev")  # e.g., dev, test, prod
@@ -31,7 +45,11 @@ else:
     DATABASE_URL = os.getenv("DATABASE_URL")
 
 if not DATABASE_URL:
-    raise ValueError("DATABASE_URL is not set")
+    # Final fallback to default SQLite at project root
+    default_sqlite_path = (project_root / "smartvault.db").resolve().as_posix()
+    DATABASE_URL = f"sqlite:///{default_sqlite_path}"
+    os.environ["DATABASE_URL"] = DATABASE_URL
+    print("DATABASE_URL was missing; using fallback SQLite at project root")
 
 # Create the database engine
 DEBUG = os.getenv("DEBUG", "false").lower() == "true"
