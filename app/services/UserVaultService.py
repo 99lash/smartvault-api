@@ -94,7 +94,7 @@ class UserVaultService:
     def get_users_sharing_vault_access(self, user_id: int) -> List[User]:
         """
         Get all users who share vault access with the specified user.
- 
+
         This method:
         1. Verifies the user exists
         2. Finds all vaults the user has access to
@@ -110,8 +110,14 @@ class UserVaultService:
         Raises:
             ValueError: If the user doesn't exist
         """
-        # First verify the user exists (we can use UserService for this)
-        # For now, we'll assume the user exists and let the query handle it
-        shared_users = self.repo.get_users_sharing_vault_access(user_id)
-
-        return shared_users
+        try:
+            # First verify the user exists (we can use UserService for this)
+            # For now, we'll assume the user exists and let the query handle it
+            shared_users = self.repo.get_users_sharing_vault_access(user_id)
+            return shared_users
+        except Exception as e:
+            # Log the error for debugging
+            import logging
+            logging.error(f"Error in get_users_sharing_vault_access for user {user_id}: {str(e)}")
+            logging.error(f"Error type: {type(e)}")
+            raise

@@ -9,6 +9,9 @@ class UserVaultRepository(Repository):
         super().__init__(db, UserVault)
 
     def get_by_user_and_vault(self, user_id: int, vault_id: int):
+        if not isinstance(user_id, int) or not isinstance(vault_id, int) or user_id <= 0 or vault_id <= 0:
+            raise ValueError("Invalid user_id or vault_id")
+
         return (
             self.db.query(self.model)
             .filter(self.model.user_id == user_id, self.model.vault_id == vault_id)
@@ -16,6 +19,9 @@ class UserVaultRepository(Repository):
         )
 
     def get_vaults_for_user(self, user_id: int):
+        if not isinstance(user_id, int) or user_id <= 0:
+            raise ValueError("Invalid user_id")
+
         return (
             self.db.query(Vault)
             .join(self.model)
@@ -24,50 +30,64 @@ class UserVaultRepository(Repository):
         )
 
     def get_users_for_vault(self, vault_id: int):
-        import logging
-        query = (
-            self.db.query(User)
-            .join(UserVault, User.id == UserVault.user_id)
-            .filter(UserVault.vault_id == vault_id)
-        )
-        logging.info(f"get_users_for_vault query for vault {vault_id}: {str(query)}")
-        users = query.all()
-        user_ids = [u.id for u in users]
-        logging.info(f"get_users_for_vault for vault {vault_id}: found {len(users)} users, IDs: {user_ids}")
-        return users
+        if not isinstance(vault_id, int) or vault_id <= 0:
+            raise ValueError("Invalid vault_id")
+
+        try:
+            users = (
+                self.db.query(User)
+                .join(UserVault, User.id == UserVault.user_id)
+                .filter(UserVault.vault_id == vault_id)
+                .all()
+            )
+            return users
+        except Exception as e:
+            # Don't log sensitive information, just log error type
+            import logging
+            logging.error(f"Database error in get_users_for_vault: {type(e).__name__}")
+            raise
 
     def has_access(self, user_id: int, vault_id: int):
+        if not isinstance(user_id, int) or not isinstance(vault_id, int) or user_id <= 0 or vault_id <= 0:
+            return False
+
         return self.get_by_user_and_vault(user_id, vault_id) is not None
 
     def get_users_sharing_vault_access(self, user_id: int):
         """
         Get all users who share vault access with the specified user.
-        This finds all vaults the user has access to, then finds all other users
-        who have access to any of those same vaults.
+        Uses a single optimized query to avoid N+1 query issues.
 
         Args:
             user_id: The user ID to find shared vault access for
 
         Returns:
             List of User objects who share at least one vault with the specified user
+
+        Raises:
+            ValueError: If user_id is invalid
+            HTTPException: If database error occurs
         """
-        # First, get all vaults the user has access to
-        user_vaults = self.get_vaults_for_user(user_id)
+        if not isinstance(user_id, int) or user_id <= 0:
+            raise ValueError("Invalid user_id")
 
-        if not user_vaults:
-            return []
+        try:
+            # Single optimized query instead of multiple queries
+            # Find users who share vaults with the specified user
+            shared_users = (
+                self.db.query(User)
+                .join(UserVault, User.id == UserVault.user_id)
+                .join(Vault, UserVault.vault_id == Vault.id)
+                .filter(UserVault.user_id == user_id)  # User's vaults
+                .filter(User.id != user_id)  # Exclude the user themselves
+                .distinct()
+                .all()
+            )
 
-        # Get vault IDs
-        vault_ids = [vault.id for vault in user_vaults]
-
-        # Find all users who have access to any of these vaults (excluding the original user)
-        shared_users = (
-            self.db.query(User)
-            .join(UserVault, User.id == UserVault.user_id)
-            .filter(UserVault.vault_id.in_(vault_ids))
-            .filter(User.id != user_id)  # Exclude the original user
-            .distinct()  # Remove duplicates
-            .all()
-        )
-
-        return shared_users 
+            return shared_users
+        except Exception as e:
+            # Don't log sensitive information, just log error type
+            import logging
+            logging.error(f"Database error in get_users_sharing_vault_access: {type(e).__name__}")
+            from fastapi import HTTPException
+            raise HTTPException(status_code=500, detail="Database error occurred")
