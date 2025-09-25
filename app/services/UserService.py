@@ -232,25 +232,6 @@ class UserService:
             raise credentials_exception
         return user
     
-    def require_admin(self, current_user = Depends(get_current_user)):
-        """
-        Dependency to check if current user has admin role.
-
-        Args:
-            current_user: Current authenticated user
-
-        Returns:
-            User object if user has admin role
-
-        Raises:
-            HTTPException: If user doesn't have admin role
-        """
-        if current_user.role != UserRole.admin:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Admin access required"
-            )
-        return current_user
 
     def get_users_sharing_vault_access(self, target_user_id: int, current_user: User) -> list[User]:
         """
