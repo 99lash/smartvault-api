@@ -56,7 +56,7 @@ class UserVaultRepository(Repository):
     def get_users_sharing_vault_access(self, user_id: int):
         """
         Get all users who share vault access with the specified user.
-        Uses a single optimized query to avoid N+1 query issues.
+        Uses a subquery to find users who have access to the same vaults.
 
         Args:
             user_id: The user ID to find shared vault access for
@@ -72,13 +72,18 @@ class UserVaultRepository(Repository):
             raise ValueError("Invalid user_id")
 
         try:
-            # Single optimized query instead of multiple queries
-            # Find users who share vaults with the specified user
+            # First, get all vaults that the specified user has access to
+            user_vaults_subquery = (
+                self.db.query(UserVault.vault_id)
+                .filter(UserVault.user_id == user_id)
+                .subquery()
+            )
+
+            # Then, find all users who have access to those same vaults (excluding the user themselves)
             shared_users = (
                 self.db.query(User)
                 .join(UserVault, User.id == UserVault.user_id)
-                .join(Vault, UserVault.vault_id == Vault.id)
-                .filter(UserVault.user_id == user_id)  # User's vaults
+                .filter(UserVault.vault_id.in_(user_vaults_subquery))
                 .filter(User.id != user_id)  # Exclude the user themselves
                 .distinct()
                 .all()
