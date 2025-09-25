@@ -1,11 +1,18 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordRequestForm
+from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer
 from datetime import timedelta
 from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.schemas.user import UserCreate,UserRegister, UserLogin, UpdateUserRole, UserRead
 from app.schemas.Response import Response
 from app.services.UserService import UserService
+from app.models.User import User, UserRole
+from jose import JWTError, jwt as jose_jwt
+from app.core.config import settings
+import logging
+
+# OAuth2 scheme for token authentication
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="users/login")
 
 # -----------------------------
 # FastAPI router for User endpoints
@@ -20,10 +27,70 @@ from app.services.UserService import UserService
 router = APIRouter(prefix="/users", tags=["users"])
 
 # -----------------------------
+# Dependency Functions for FastAPI
+# -----------------------------
+# These functions provide proper dependency injection for UserService methods
+
+def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> User:
+    """
+    Dependency function to get current authenticated user.
+
+    Args:
+        token: JWT token from Authorization header
+        db: Database session
+
+    Returns:
+        User object for authenticated user
+
+    Raises:
+        HTTPException: If token is invalid or user not found
+    """
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+    try:
+        payload = jose_jwt.decode(token, settings.JWT_SECRET, algorithms=settings.ALLOWED_JWT_ALGORITHMS)
+        username: str = payload.get("sub")
+        if username is None:
+            raise credentials_exception
+    except JWTError as e:
+        logging.error(f"JWT decode failed: {type(e).__name__}")
+        raise credentials_exception
+
+    service = UserService(db)
+    user = service.get_user_by_username(username)
+    if user is None:
+        raise credentials_exception
+    return user
+
+def require_admin(current_user: User = Depends(get_current_user)) -> User:
+    """
+    Dependency function to check admin access.
+
+    Args:
+        current_user: Current authenticated user
+
+    Returns:
+        User object if user has admin role
+
+    Raises:
+        HTTPException: If user doesn't have admin role
+    """
+    if current_user.role != UserRole.admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required"
+        )
+    return current_user
+
+# -----------------------------
 # Create a new user
 # -----------------------------
 @router.post("/", response_model=Response[UserRead], status_code=status.HTTP_201_CREATED)
-def create_user(payload: UserCreate, current_user = Depends(UserService.require_admin), db: Session = Depends(get_db)):
+def create_user(payload: UserCreate, current_user = Depends(require_admin), db: Session = Depends(get_db)):
     # Need admin role para makapag create.
     """
     Creates a new user.
@@ -40,7 +107,7 @@ def create_user(payload: UserCreate, current_user = Depends(UserService.require_
 # List all users
 # -----------------------------
 @router.get("/", response_model=list[UserRead])
-def list_users(current_user = Depends(UserService.get_current_user), db: Session = Depends(get_db)):
+def list_users(current_user = Depends(get_current_user), db: Session = Depends(get_db)):
     """
     Returns all users.
     - Could be filtered later to exclude soft-deleted users.
@@ -52,7 +119,7 @@ def list_users(current_user = Depends(UserService.get_current_user), db: Session
 # Get a user by ID
 # -----------------------------
 @router.get("/{user_id}", response_model=UserRead)
-def get_user(user_id: int, current_user = Depends(UserService.require_admin), db: Session = Depends(get_db)):
+def get_user(user_id: int, current_user = Depends(require_admin), db: Session = Depends(get_db)):
     """
     Fetch a single user by ID.
     - Raises 404 if user not found.
@@ -100,14 +167,14 @@ def register(payload: UserRegister, db: Session = Depends(get_db)):
 # Get current user from token
 # -----------------------------
 @router.get("/test/me", response_model=UserRead)
-def get_me(current_user: UserRead = Depends(UserService.get_current_user)):
+def get_me(current_user: UserRead = Depends(get_current_user)):
     return current_user
 
 # -----------------------------
 # Soft delete a user
 # -----------------------------
 @router.delete("/{user_id}", response_model=Response)
-def delete_user(user_id: int, current_user = Depends(UserService.require_admin),db: Session = Depends(get_db)):
+def delete_user(user_id: int, current_user = Depends(require_admin),db: Session = Depends(get_db)):
     """
     Soft deletes a user by ID.
     - Admin role is required.
@@ -142,7 +209,7 @@ def update_user_role(user_id: int, payload: UpdateUserRole, db: Session = Depend
 # Get users sharing vault access
 # -----------------------------
 @router.get("/vault/{user_id}", response_model=list[UserRead])
-def get_users_sharing_vault_access(user_id: int, current_user: UserRead = Depends(UserService.get_current_user), db: Session = Depends(get_db)):
+def get_users_sharing_vault_access(user_id: int, current_user: UserRead = Depends(get_current_user), db: Session = Depends(get_db)):
     """
     Get all users who share vault access with the specified user.
 
