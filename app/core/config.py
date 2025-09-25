@@ -8,8 +8,16 @@ load_dotenv()
 class Settings(BaseSettings):
     # Existing settings
     REDIS_URL: str = "redis://localhost:6379"
-    JWT_SECRET: str = "your-secret-key"
     API_V1_STR: str = "/api/v1"
+
+    # JWT Configuration - All configurable via environment variables
+    JWT_SECRET: str = "your-secret-key-change-in-production"
+    JWT_ALGORITHM: str = "HS256"
+    JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    JWT_REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+
+    # Security settings
+    ALLOWED_JWT_ALGORITHMS: List[str] = ["HS256", "HS512", "RS256"]
 
     # Log configuration
     DEFAULT_LOG_PREFIXES: List[LogPrefixesEnum] = [
