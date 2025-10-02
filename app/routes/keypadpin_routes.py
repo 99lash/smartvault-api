@@ -25,12 +25,21 @@ router = APIRouter(prefix="/keypad-pins", tags=["keypad_pins"])
 def create_keypad_pin(payload: KeypadPinCreate, db: Session = Depends(get_db)):
     """
     Creates a new keypad pin record.
-    - Requires a pin code (must be unique).
+    - Pin code must be unique within the user's pins.
+    - Different users can have the same pin code.
     - user_id is optional (can be None if unassigned).
     """
-    service = KeypadPinsService(db)
-    pin = service.create_keypad_pin(payload.pin_code, payload.user_id)
-    return Response(success=True, data=pin, detail="Pin created successfully")
+    try:
+        service = KeypadPinsService(db)
+        pin = service.create_keypad_pin(payload.pin_code, payload.user_id)
+        return Response(success=True, data=pin, detail="Pin created successfully")
+    except HTTPException:
+        raise  # Re-raise HTTP exceptions as-is
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"An unexpected error occurred: {str(e)}"
+        )
 
 
 # -----------------------------

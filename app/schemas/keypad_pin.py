@@ -16,9 +16,9 @@ class KeypadPinAssign(SQLModel, table=False):
 # Keypad Pin HTTP Response Schemas
 # ----------------------------
 class KeypadPinRead(SQLModel, table=False):
-  id: int
-  user_id: Optional[int] = None
-  pin_code: str
-  created_at: datetime
-  updated_at: Optional[datetime] = None
-  deleted_at: Optional[datetime] = None
+   id: Optional[int] = None  # Add this missing field
+   user_id: Optional[int] = None
+   pin_code: str
+   created_at: datetime
+   updated_at: Optional[datetime] = None
+   deleted_at: Optional[datetime] = None

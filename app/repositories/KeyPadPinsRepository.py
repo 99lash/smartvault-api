@@ -13,3 +13,10 @@ class KeypadPinsRepository(Repository):
     def get_by_user_id(self, user_id: int):
         """Fetch all keypad pins for a specific user"""
         return self.db.query(self.model).filter(self.model.user_id == user_id).all()
+
+    def get_by_user_and_pin(self, user_id: int, pin_code: str):
+        """Fetch a specific pin for a specific user"""
+        return self.db.query(self.model).filter(
+            self.model.user_id == user_id,
+            self.model.pin_code == pin_code
+        ).first()
