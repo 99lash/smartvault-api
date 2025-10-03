@@ -41,12 +41,13 @@ class VaultInvitationService:
             expires_at=expires_at
         )
 
-    def accept_invitation(self, invite_code: str) -> Optional[VaultInvitation]:
+    def accept_invitation(self, invite_code: str, accepting_user_id: int) -> Optional[VaultInvitation]:
         """
         Accept a vault invitation and create membership.
 
         Args:
             invite_code (str): The invitation code to accept
+            accepting_user_id (int): The user who is accepting the invitation
 
         Returns:
             VaultInvitation | None: The invitation if accepted successfully
@@ -66,10 +67,10 @@ class VaultInvitationService:
         accepted_invitation = self.repo.mark_invitation_accepted(invite_code)
 
         if accepted_invitation:
-            # Create the vault membership
+            # Create the vault membership for the accepting user
             try:
                 self.membership_service.add_user_to_vault(
-                    user_id=accepted_invitation.invited_by,  # This should be the accepting user
+                    user_id=accepting_user_id,  # Use the accepting user, not the inviter
                     vault_id=accepted_invitation.vault_id,
                     role=accepted_invitation.role
                 )

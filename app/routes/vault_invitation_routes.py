@@ -224,8 +224,8 @@ def accept_vault_invitation(
                 detail=validation["reason"]
             )
 
-        # Accept the invitation (creates membership automatically)
-        accepted_invitation = invitation_service.accept_invitation(invite_code)
+        # Accept the invitation (creates membership for current user)
+        accepted_invitation = invitation_service.accept_invitation(invite_code, current_user.id)
 
         return Response(
             success=True,

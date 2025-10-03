@@ -189,6 +189,49 @@ def update_user_role_in_vault(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 # -----------------------------
+# Check if current user is admin of a vault (for invitation creation)
+# -----------------------------
+@router.get("/vaults/{vault_id}/admin-check", response_model=Response)
+def check_vault_admin(
+    vault_id: str,
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db)
+):
+    """
+    Check if the current user is an admin of the specified vault.
+    Used for authorization before creating invitations.
+
+    **Requirements:**
+    - User must be authenticated
+    """
+    try:
+        # Manual token validation
+        if not authorization or not authorization.startswith("Bearer "):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Not authenticated"
+            )
+
+        token = authorization.split(" ")[1]
+        user_service = UserService(db)
+        current_user = user_service.validate_token(token)
+
+        # Check if current user is admin of the vault
+        membership_service = VaultMembershipService(db)
+        is_admin = membership_service.is_user_admin_of_vault(current_user.id, vault_id)
+
+        return Response(
+            success=True,
+            data={"is_admin": is_admin},
+            detail=f"Admin check completed for vault {vault_id}"
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+# -----------------------------
 # Get all members of a vault
 # -----------------------------
 @router.get("/vault/{vault_id}", response_model=Response[List[VaultMembershipResponse]])
@@ -300,6 +343,55 @@ def remove_user_from_vault(
             success=True,
             detail=f"User {user_id} removed from vault {vault_id}"
         )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+# -----------------------------
+# Get current user's accessible vaults
+# -----------------------------
+@router.get("/user/vaults", response_model=Response[List[VaultMembershipResponse]])
+def get_current_user_vaults(
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db)
+):
+    """
+    Get all vaults the current user has access to.
+
+    **Requirements:**
+    - User must be authenticated
+    """
+    try:
+        # Manual token validation
+        if not authorization or not authorization.startswith("Bearer "):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Not authenticated"
+            )
+
+        token = authorization.split(" ")[1]
+        user_service = UserService(db)
+        current_user = user_service.validate_token(token)
+
+        # Get user's vault memberships
+        membership_service = VaultMembershipService(db)
+        user_memberships = membership_service.get_user_vaults(current_user.id)
+
+        # Format response
+        response_data = []
+        for membership in user_memberships:
+            response_data.append(VaultMembershipResponse(
+                id=membership.id,
+                user_id=membership.user_id,
+                vault_id=membership.vault_id,
+                role=membership.role.value,
+                created_at=membership.created_at.isoformat(),
+                updated_at=membership.updated_at.isoformat() if membership.updated_at else None
+            ))
+
+        return Response(success=True, data=response_data)
 
     except HTTPException:
         raise
