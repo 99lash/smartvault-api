@@ -14,7 +14,15 @@ class Repository:
         return self.db.query(self.model).filter(self.model.id == record_id).first()
 
     def create(self, **kwargs):
+        # Create the model instance
         obj = self.model(**kwargs)
+
+        # Ensure created_at is always a proper datetime object
+        if hasattr(obj, 'created_at'):
+            from datetime import datetime
+            if obj.created_at is None or isinstance(obj.created_at, str):
+                obj.created_at = datetime.utcnow()
+
         self.db.add(obj)
         self.db.commit()
         self.db.refresh(obj)

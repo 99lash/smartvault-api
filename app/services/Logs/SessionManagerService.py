@@ -1,10 +1,10 @@
-from typing import Dict
+from typing import Dict, Optional
 import time
 
 class SessionManager:
     auth_sessions: Dict[str, Dict] = {}
 
-    def get_session_key(self, vault_id: int, user_id: int) -> str:
+    def get_session_key(self, vault_id: str, user_id: int) -> str:
         """
         Generate a unique session key for tracking multi-factor authentication state.
         
@@ -37,15 +37,39 @@ class SessionManager:
         for key in expired_keys:
             del SessionManager.auth_sessions[key]
 
-    def clear_sessions_for_vault(self, vault_id: int):
+    def clear_sessions_for_vault(self, vault_id: str):
         """
         Clear all authentication sessions for a specific vault.
-        
+
         Used to reset MFA state on failures, tampers, or security events.
-        
+
         Args:
             vault_id (int): The vault ID to clear sessions for.
         """
         keys_to_delete = [key for key in SessionManager.auth_sessions if f"vault_{vault_id}_" in key]
         for key in keys_to_delete:
             del SessionManager.auth_sessions[key]
+
+    def find_user_for_vault_session(self, vault_id: str, details: str, validator) -> Optional[int]:
+        """
+        Find user_id for a vault session using vault-centric credential validation.
+
+        Args:
+            vault_id (int): The vault ID.
+            details (str): Authentication details.
+            validator: CredentialValidator instance.
+
+        Returns:
+            Optional[int]: User ID if found and authorized for vault, None otherwise.
+        """
+        from app.services.Logs.VaultAccessControllerService import VaultAccessController
+        from app.repositories.UserVaultRepository import UserVaultRepository
+        from app.core.database import SessionLocal
+
+        db = SessionLocal()
+        try:
+            uv_repo = UserVaultRepository(db)
+            controller = VaultAccessController(uv_repo)
+            return validator.extract_user_id_from_details_for_vault(details, vault_id, controller)
+        finally:
+            db.close()

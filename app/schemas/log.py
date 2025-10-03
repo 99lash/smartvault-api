@@ -6,19 +6,11 @@ from app.models.Log import LogEventType
 # Log HTTP Request Schemas
 # ----------------------------
 class LogCreate(BaseModel):
-    vault_id: int = Field(..., ge=1, description="The ID of the vault associated with the log")
+    vault_id: int = Field(..., description="The ID of the vault associated with the log")
     event_type: LogEventType = Field(..., description="The type of log event")
     user_id: Optional[int] = Field(None, ge=1, description="The ID of the user who triggered the event (optional)")
     details: Optional[str] = Field(None, max_length=1000, description="Additional details about the event")
     
-    @field_validator("vault_id", mode="before")
-    def parse_vault_id(cls, v):
-        if isinstance(v, str):
-            try:
-                return int(v)
-            except ValueError:
-                raise ValueError("vault_id must be a valid integer")
-        return v
     
     @field_validator("event_type", mode="before")
     def normalize_event_type(cls, v):
@@ -60,7 +52,7 @@ class VaultBreakdown(BaseModel):
 class LogUserSummaryRead(BaseModel):
     total_activities: int
     vaults_accessed: int
-    vault_breakdown: dict[int, VaultBreakdown]
+    vault_breakdown: dict[str, VaultBreakdown]
     period_hours: int
 
     class Config:
@@ -89,8 +81,8 @@ class LogVaultSuspiciousRead(BaseModel):
     report_period_hours: int
     total_security_events: int
     event_type_breakdown: EventBreakdown
-    vaults_with_issues: dict[int , VaultsIssuesBreakdown]
-    high_risk_vaults: list[int]
+    vaults_with_issues: dict[str , VaultsIssuesBreakdown]
+    high_risk_vaults: list[str]
   
     class Config:
         from_attributes = True

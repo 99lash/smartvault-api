@@ -28,7 +28,7 @@ class Log(Model, table=True):
     vault_id: int = Field(foreign_key="vaults.id", nullable=False)
     user_id: Optional[int] = Field(foreign_key="users.id", default=None)  # nullable if unknown intruder
     event_type: LogEventType = Field(nullable=False)
-    timestamp: datetime = Field(default_factory=datetime.utcnow, nullable=False)
+    # Use created_at from base Model instead of separate timestamp field
     details: Optional[str] = Field(default=None, nullable=True)  # JSON or text info
 
     # Optional relationships for ORM

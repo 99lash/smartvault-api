@@ -10,7 +10,7 @@ from app.services.Logs.LogQueryService import LogQueryService
 from app.websockets.LogWebSocketHandler import LogWebSocketHandler
 from app.websockets.QueryWebSocketHandler import QueryWebSocketHandler
 from app.models.Log import LogEventType
-from app.models.User import User
+from app.models.User import User, UserRole
 from app.schemas.Response import Response
 from app.core.database import SessionLocal
 from pydantic import BaseModel
@@ -20,8 +20,25 @@ from app.services.Logs.VaultAccessControllerService import VaultAccessController
 from app.repositories.UserVaultRepository import UserVaultRepository
 
 class ValidateAccessRequest(BaseModel):
-    vault_id: int
+    vault_id: str
     details: str
+
+class LogBulkDeleteRequest(BaseModel):
+    """Request schema for bulk log deletion"""
+    vault_id: Optional[str] = None
+    user_id: Optional[int] = None
+    event_type: Optional[str] = None
+    older_than_days: Optional[int] = None
+    delete_all: bool = False
+
+class LogBulkDeleteResponse(BaseModel):
+    """Response schema for bulk log deletion"""
+    deleted_count: int
+    vault_id: Optional[str] = None
+    user_id: Optional[int] = None
+    event_type: Optional[str] = None
+    older_than_days: Optional[int] = None
+    message: str
 
 # -----------------------------
 # router for Log endpoints
@@ -82,9 +99,75 @@ def delete_log(log_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Log not found")
     return Response(success=True, detail=f"Log {log_id} deleted successfully")
 
+# -----------------------------
+# Bulk delete logs
+# -----------------------------
+@router.delete("/bulk", response_model=Response[LogBulkDeleteResponse])
+def bulk_delete_logs(
+    request: LogBulkDeleteRequest,
+    current_user: User = Depends(UserService.get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Bulk delete logs based on various criteria.
+
+    **WARNING: This operation cannot be undone!**
+
+    Query Parameters (all optional):
+    - vault_id: Delete logs for specific vault only
+    - user_id: Delete logs for specific user only
+    - event_type: Delete logs of specific event type (unlock, failed_attempt, tamper, etc.)
+    - older_than_days: Delete logs older than X days
+    - delete_all: If true, ignore other filters and delete ALL logs (requires admin)
+
+    **Security:** Requires admin role for dangerous operations like delete_all
+    """
+
+    # Check if user is admin for dangerous operations
+    if request.delete_all or (request.older_than_days and request.older_than_days < 7):
+        if current_user.role != UserRole.admin:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Admin role required for this operation"
+            )
+
+    # Validate that at least one filter is provided (unless admin deleting all)
+    if not request.delete_all and not any([request.vault_id, request.user_id, request.event_type, request.older_than_days]):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="At least one filter must be provided (or use delete_all for admin)"
+        )
+
+    try:
+        service = LogService(db)
+        deleted_count = service.bulk_delete_logs(
+            vault_id=request.vault_id,
+            user_id=request.user_id,
+            event_type=request.event_type,
+            older_than_days=request.older_than_days,
+            delete_all=request.delete_all
+        )
+
+        response_data = LogBulkDeleteResponse(
+            deleted_count=deleted_count,
+            vault_id=request.vault_id,
+            user_id=request.user_id,
+            event_type=request.event_type,
+            older_than_days=request.older_than_days,
+            message=f"Successfully deleted {deleted_count} log entries"
+        )
+
+        return Response(success=True, data=response_data, detail=response_data.message)
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Bulk delete operation failed: {str(e)}"
+        )
+
 @router.get("/vault/{vault_id}/filtered")
 def get_filtered_logs(
-    vault_id: int,
+    vault_id: str,
     prefixes: str = "DUAL,Tamper,Failure,Manual",
     current_user: User = Depends(UserService.get_current_user),
     db: Session = Depends(get_db)

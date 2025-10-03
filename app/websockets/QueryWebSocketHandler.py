@@ -18,7 +18,7 @@ class QueryWebSocketHandler:
                 # Use a new DB session for the query
                 with SessionLocal() as db:
                     service = LogQueryService(db)
-                    logs = service.get_filtered_logs_by_vault(query_params.vault_id, query_params.prefixes)
+                    logs = service.get_filtered_logs_by_vault(str(query_params.vault_id), query_params.prefixes)
                     
                     # Send the filtered logs as response
                     response = {
@@ -37,7 +37,7 @@ class QueryWebSocketHandler:
                         # Re-fetch and send updated logs
                         with SessionLocal() as db_refresh:
                             service_refresh = LogQueryService(db_refresh)
-                            updated_logs = service_refresh.get_filtered_logs_by_vault(query_params.vault_id, query_params.prefixes)
+                            updated_logs = service_refresh.get_filtered_logs_by_vault(str(query_params.vault_id), query_params.prefixes)
                             update_resp = {
                                 "status": "ok",
                                 "type": "refresh",

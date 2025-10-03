@@ -32,7 +32,7 @@ class BruteforceDetectionService:
         self.db = db
         self.repo = LogRepository(db)
     
-    def _get_key(self, vault_id: int, method: str) -> str:
+    def _get_key(self, vault_id: str, method: str) -> str:
         """
         Generate Redis key for failure count.
         
@@ -45,7 +45,7 @@ class BruteforceDetectionService:
         """
         return f"bruteforce_{method}_vault_{vault_id}"
     
-    def increment_failure_count(self, vault_id: int, method: str) -> int:
+    def increment_failure_count(self, vault_id: str, method: str) -> int:
         """
         Atomically increment failure count and set TTL if first increment.
         
@@ -62,7 +62,7 @@ class BruteforceDetectionService:
             self.redis_client.expire(key, BRUTEFORCE_TTL_SECONDS)
         return count
     
-    def get_failure_count(self, vault_id: int, method: str) -> int:
+    def get_failure_count(self, vault_id: str, method: str) -> int:
         """
         Retrieve current failure count.
         
@@ -76,7 +76,7 @@ class BruteforceDetectionService:
         key = self._get_key(vault_id, method)
         return self.redis_client.get(key) or 0
     
-    def reset_failure_count(self, vault_id: int, method: str) -> None:
+    def reset_failure_count(self, vault_id: str, method: str) -> None:
         """
         Reset (delete) failure count for a method.
         
@@ -87,7 +87,7 @@ class BruteforceDetectionService:
         key = self._get_key(vault_id, method)
         self.redis_client.delete(key)
     
-    def check_threshold_and_log_tamper(self, vault_id: int, method: str, threshold: int = BRUTEFORCE_THRESHOLD) -> bool:
+    def check_threshold_and_log_tamper(self, vault_id: str, method: str, threshold: int = BRUTEFORCE_THRESHOLD) -> bool:
         """
         Increment count, check threshold, and log tamper if exceeded.
         

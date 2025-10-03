@@ -6,14 +6,14 @@ class VaultAccessController:
     def __init__(self, user_vault_repo: UserVaultRepository):
         self.user_vault_repo = user_vault_repo
 
-    def check_access(self, user_id: int, vault_id: int) -> bool:
+    def check_access(self, user_id: int, vault_id: str) -> bool:
         """
         Check if the user has access to the specified vault.
-        
+
         Args:
             user_id (int): The ID of the user.
             vault_id (int): The ID of the vault.
-            
+
         Returns:
             bool: True if access granted, False otherwise.
         """

@@ -35,8 +35,8 @@ class LogRepository(Repository):
         cutoff_time = datetime.utcnow() - timedelta(hours=hours)
         return (
             self.db.query(self.model)
-            .filter(self.model.timestamp >= cutoff_time)
-            .order_by(self.model.timestamp.desc())
+            .filter(self.model.created_at >= cutoff_time)
+            .order_by(self.model.created_at.desc())
             .all()
         )
 
@@ -45,14 +45,14 @@ class LogRepository(Repository):
     ) -> List[Log]:
         """Get logs within a specific date range, optionally filtered by vault"""
         query = self.db.query(self.model).filter(
-            self.model.timestamp >= start_date,
-            self.model.timestamp <= end_date 
+            self.model.created_at >= start_date,
+            self.model.created_at <= end_date
         )
-        
+
         if vault_id:
             query = query.filter(self.model.vault_id == vault_id)
-        
-        return query.order_by(self.model.timestamp.desc()).all()
+
+        return query.order_by(self.model.created_at.desc()).all()
 
     def get_failed_attempts_by_vault(self, vault_id: int, hours: int = 24) -> List[Log]:
         """Get recent failed attempts for a specific vault"""
@@ -62,9 +62,9 @@ class LogRepository(Repository):
             .filter(
                 self.model.vault_id == vault_id,
                 self.model.event_type == LogEventType.failed_attempt,
-                self.model.timestamp >= cutoff_time
+                self.model.created_at >= cutoff_time
             )
-            .order_by(self.model.timestamp.desc())
+            .order_by(self.model.created_at.desc())
             .all()
         )
 
@@ -79,25 +79,25 @@ class LogRepository(Repository):
         
         query = self.db.query(self.model).filter(
             self.model.event_type.in_(security_events),
-            self.model.timestamp >= cutoff_time
+            self.model.created_at >= cutoff_time
         )
-        
+
         if vault_id:
             query = query.filter(self.model.vault_id == vault_id)
-        
-        return query.order_by(self.model.timestamp.desc()).all()
+
+        return query.order_by(self.model.created_at.desc()).all()
 
     def count_events_by_type(self, vault_id: Optional[int] = None, hours: int = 24) -> dict:
         """Get count of events by type for analytics"""
         cutoff_time = datetime.utcnow() - timedelta(hours=hours)
         
         query = self.db.query(self.model.event_type, func.count(self.model.id)).filter(
-            self.model.timestamp >= cutoff_time
+            self.model.created_at >= cutoff_time
         )
-        
+
         if vault_id:
             query = query.filter(self.model.vault_id == vault_id)
-        
+
         results = query.group_by(self.model.event_type).all()
         return {event_type: count for event_type, count in results}
 
@@ -156,7 +156,7 @@ class LogRepository(Repository):
         offset = (page - 1) * per_page
         return (
             query
-            .order_by(self.model.timestamp.desc())
+            .order_by(self.model.created_at.desc())
             .offset(offset)
             .limit(per_page)
             .all()
@@ -185,7 +185,7 @@ class LogRepository(Repository):
                 self.model.vault_id == vault_id,
                 or_(*like_filters)
             )
-            .order_by(self.model.timestamp.desc())
+            .order_by(self.model.created_at.desc())
             .all()
         )
 
@@ -194,8 +194,33 @@ class LogRepository(Repository):
         cutoff_date = datetime.utcnow() - timedelta(days=days)
         deleted_count = (
             self.db.query(self.model)
-            .filter(self.model.timestamp < cutoff_date)
+            .filter(self.model.created_at < cutoff_date)
             .delete()
         )
         self.db.commit()
+        return deleted_count
+
+    def bulk_delete(self, filters: list = None) -> int:
+        """
+        Bulk delete logs based on filter conditions.
+
+        Args:
+            filters (list): List of SQLAlchemy filter conditions
+
+        Returns:
+            int: Number of records deleted
+        """
+        if filters is None:
+            filters = []
+
+        # Build query with filters
+        query = self.db.query(self.model)
+        if filters:
+            for filter_condition in filters:
+                query = query.filter(filter_condition)
+
+        # Execute bulk delete
+        deleted_count = query.delete(synchronize_session=False)
+        self.db.commit()
+
         return deleted_count

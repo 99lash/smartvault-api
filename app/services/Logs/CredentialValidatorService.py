@@ -62,18 +62,45 @@ class CredentialValidator:
                 
         return nfc, pin
 
-    def validate_credential(self, credential: str, is_nfc: bool) -> tuple[Optional[int], Optional[str]]:
+    def validate_credential_for_vault(self, credential: str, is_nfc: bool, vault_id: str, access_controller) -> tuple[Optional[int], Optional[str]]:
         """
-        Validate a single NFC or PIN credential against the database.
-        
-        Performs a quick lookup to retrieve the associated user ID if valid.
-        
+        Validate a credential against users who have access to a specific vault.
+        This is the vault-centric approach.
+
         Args:
             credential (str): The credential value (UID or PIN code).
             is_nfc (bool): True if NFC credential, False if PIN.
-            
+            vault_id (int): The vault ID to check access for.
+            access_controller: VaultAccessController instance to check permissions.
+
         Returns:
-            tuple[Optional[int], Optional[str]]: (user_id, method_string) if valid, (None, None) otherwise.
+            tuple[Optional[int], Optional[str]]: (user_id, method_string) if valid for vault, (None, None) otherwise.
+        """
+        if is_nfc:
+            # Validate NFC card by UID
+            card = self.nfc_repo.get_by_uid(credential)
+            if card and card.user_id:
+                # Check if this NFC user has vault access
+                has_access = access_controller.check_access(card.user_id, vault_id)
+                if has_access:
+                    return card.user_id, f"NFC: {credential}"
+        else:
+            # Validate PIN code - check against all users who have vault access
+            authorized_users = access_controller.user_vault_repo.get_users_for_vault(vault_id)
+            authorized_user_ids = [user.id for user in authorized_users]
+
+            # Check if PIN belongs to any authorized user
+            for user_id in authorized_user_ids:
+                user_pin = self.pin_repo.get_by_user_and_pin(user_id, credential)
+                if user_pin:
+                    return user_id, f"PIN: {credential}"
+
+        return None, None
+
+    def validate_credential(self, credential: str, is_nfc: bool) -> tuple[Optional[int], Optional[str]]:
+        """
+        Legacy method - kept for backward compatibility.
+        Use validate_credential_for_vault() for new vault-centric approach.
         """
         if is_nfc:
             # Validate NFC card by UID
@@ -87,33 +114,60 @@ class CredentialValidator:
                 return record.user_id, f"PIN: {credential}"
         return None, None
 
-    def extract_user_id_from_details(self, details: str) -> Optional[int]:
+    def extract_user_id_from_details_for_vault(self, details: str, vault_id: str, access_controller) -> Optional[int]:
         """
-        Extract user_id from credential details without full validation.
-        
+        Extract user_id from credential details using vault-centric approach.
+
         This is a lightweight lookup used to quickly check for existing MFA sessions
-        before full validation. It parses details and queries the DB minimally.
-        
+        before full validation. Only returns user_id if the credential belongs to
+        a user authorized for the specified vault.
+
         Args:
             details (str): Authentication details string.
-            
+            vault_id (int): The vault ID to check access for.
+            access_controller: VaultAccessController instance.
+
         Returns:
-            Optional[int]: User ID if found, None otherwise.
+            Optional[int]: User ID if found and authorized for vault, None otherwise.
         """
         try:
             nfc, pin = self.parse_credentials(details)
-            
+
+            # Quick user lookup - prioritize NFC, then PIN
+            if nfc:
+                user_id, _ = self.validate_credential_for_vault(nfc, True, vault_id, access_controller)
+                if user_id:
+                    return user_id
+
+            if pin:
+                user_id, _ = self.validate_credential_for_vault(pin, False, vault_id, access_controller)
+                if user_id:
+                    return user_id
+
+            return None
+        except Exception:
+            # Swallow exceptions to ensure quick failure for session check
+            return None
+
+    def extract_user_id_from_details(self, details: str) -> Optional[int]:
+        """
+        Legacy method - kept for backward compatibility.
+        Use extract_user_id_from_details_for_vault() for new vault-centric approach.
+        """
+        try:
+            nfc, pin = self.parse_credentials(details)
+
             # Quick user lookup - prioritize NFC, then PIN
             if nfc:
                 user_id, _ = self.validate_credential(nfc, True)
                 if user_id:
                     return user_id
-            
+
             if pin:
                 user_id, _ = self.validate_credential(pin, False)
                 if user_id:
                     return user_id
-                    
+
             return None
         except Exception:
             # Swallow exceptions to ensure quick failure for session check

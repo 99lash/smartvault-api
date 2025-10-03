@@ -30,7 +30,7 @@ class LogWebSocketHandler:
         # Check for query mode (log retrieval with auth)
         query_params = self.websocket.query_params
         token = query_params.get('token')
-        vault_id_str = query_params.get('vault_id')
+        vault_id_str = str(query_params.get('vault_id'))
         prefixes_str = query_params.get('prefixes', '')
         
         token_preview = token[:20] + "..." if token else "None"
@@ -42,7 +42,7 @@ class LogWebSocketHandler:
             print("WS: Entering query mode")
             logging.info("Detected query mode")
             try:
-                vault_id = int(vault_id_str)
+                vault_id = vault_id_str
                 prefixes = [p.strip() for p in prefixes_str.split(',') if p.strip()]
                 print(f"WS: Parsed vault_id={vault_id}, prefixes={prefixes}")
                 

@@ -7,6 +7,9 @@ from app.routes.keypadpin_routes import router as keypadpin_router
 from app.routes.log_routes import router as log_router
 from app.routes.nfccard_routes import router as nfccard_routes
 from app.routes.uservault_routes import router as uservault_router
+from app.routes.vault_invitation_routes import router as vault_invitation_router
+from app.routes.vault_membership_routes import router as vault_membership_router
+from app.routes.vault_routes import router as vault_routes_router
 
 
 from fastapi.middleware.cors import CORSMiddleware
@@ -33,13 +36,13 @@ except Exception as e:
 # Include routes
 app.include_router(user_router)
 app.include_router(vault_router)
+app.include_router(vault_routes_router)
 app.include_router(keypadpin_router)
 app.include_router(log_router)
 app.include_router(nfccard_routes)
 app.include_router(uservault_router)
+app.include_router(vault_invitation_router)
+app.include_router(vault_membership_router)
 
 
-from app.websockets.LogWebSocketHandler import LogWebSocketHandler
-
-from fastapi import WebSocket
 

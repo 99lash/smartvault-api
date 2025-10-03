@@ -20,7 +20,7 @@ class LogQueryService:
         """
         self.repo = LogRepository(db)
     
-    def get_filtered_logs_by_vault(self, vault_id: int, prefixes: List[str]) -> List[dict]:
+    def get_filtered_logs_by_vault(self, vault_id: str, prefixes: List[str]) -> List[dict]:
         """
         Retrieve logs for a specific vault filtered by details prefixes.
         

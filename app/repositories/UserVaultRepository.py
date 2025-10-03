@@ -38,6 +38,8 @@ class UserVaultRepository(Repository):
                 self.db.query(User)
                 .join(UserVault, User.id == UserVault.user_id)
                 .filter(UserVault.vault_id == vault_id)
+                .filter(UserVault.deleted_at == None)  # Exclude soft-deleted user-vault relationships
+                .filter(User.deleted_at == None)       # Also exclude soft-deleted users
                 .all()
             )
             return users

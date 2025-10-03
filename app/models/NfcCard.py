@@ -1,7 +1,7 @@
 from sqlmodel import SQLModel, Field, Relationship
 from typing import Optional
 from datetime import datetime
-from .Model import Model 
+from .Model import Model
 from .User import User
 
 class NfcCard(Model, table=True):

@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 from app.repositories.UserRepository import UserRepository
 from app.core.security import hash_password, verify_password
-from fastapi.security import OAuth2PasswordBearer
+from fastapi.security import HTTPBearer
 from fastapi import HTTPException, status, Depends
 from app.core.database import get_db
 from app.models.User import User, UserRole
@@ -17,7 +17,7 @@ SECRET_KEY = settings.JWT_SECRET
 ALGORITHM = settings.JWT_ALGORITHM
 ACCESS_TOKEN_EXPIRE_MINUTES = settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/users/login")
+bearer_scheme = HTTPBearer()
 
 # -----------------------------
 # Service layer for User logic
@@ -168,7 +168,7 @@ class UserService:
         access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
         return self.create_access_token(data={"sub": user.username}, expires_delta=access_token_expires)
 
-    def get_current_user(self, token: str = Depends(oauth2_scheme)) -> User:
+    def get_current_user(self, token = Depends(bearer_scheme)) -> User:
         """
         Get current user from JWT token.
 

@@ -16,7 +16,7 @@ class AuthenticationFlow:
         self.security_policy = security_policy
         self.repo = repo
 
-    def progressive_access(self, vault_id: int, details: str) -> Tuple[Optional[Log], str]:
+    def progressive_access(self, vault_id: str, details: str) -> Tuple[Optional[Log], str]:
         """
         Progressive authentication that builds up factors and can operate in multiple modes:
         1. Single auth mode: First valid credential grants access
@@ -36,37 +36,38 @@ class AuthenticationFlow:
         method_used = None
         current_method = None  # Track the first factor method for session storage
         
-        # Validate the provided credential(s) - prioritize NFC over PIN if both present
+        # Validate the provided credential(s) using vault-centric approach
         if nfc:
-            user_id, method_used = self.validator.validate_credential(nfc, is_nfc=True)
+            user_id, method_used = self.validator.validate_credential_for_vault(nfc, is_nfc=True, vault_id=vault_id, access_controller=self.access_controller)
             if user_id:
                 current_method = "NFC"
-        
+
         if not user_id and pin:
-            user_id, method_used = self.validator.validate_credential(pin, is_nfc=False)
+            user_id, method_used = self.validator.validate_credential_for_vault(pin, is_nfc=False, vault_id=vault_id, access_controller=self.access_controller)
             if user_id:
                 current_method = "PIN"
         
-        # If both credentials provided in a single request, validate they belong to the same user
+        # If both credentials provided in a single request, validate they both work for this vault
         # This handles "immediate dual auth" where client sends both factors at once
         if nfc and pin:
-            nfc_user, _ = self.validator.validate_credential(nfc, is_nfc=True)
-            pin_user, _ = self.validator.validate_credential(pin, is_nfc=False)
-            
+            nfc_user, _ = self.validator.validate_credential_for_vault(nfc, is_nfc=True, vault_id=vault_id, access_controller=self.access_controller)
+            pin_user, _ = self.validator.validate_credential_for_vault(pin, is_nfc=False, vault_id=vault_id, access_controller=self.access_controller)
+
             if not nfc_user or not pin_user:
-                # One or both invalid - log as failed attempt
+                # One or both invalid for this vault - log as failed attempt
                 log_entry = self.repo.create(
                     vault_id=vault_id,
                     user_id=None,
                     event_type=LogEventType.failed_attempt,
-                    details=f"Invalid dual credentials: NFC={nfc_user is not None}, PIN={pin_user is not None}",
+                    details=f"Invalid dual credentials for vault: NFC={nfc_user is not None}, PIN={pin_user is not None}",
                     timestamp=datetime.utcnow()
                 )
                 self.session_manager.clear_sessions_for_vault(vault_id)
                 return log_entry, 'invalid_credentials'
-            
+
             if nfc_user != pin_user:
-                # Credentials belong to different users - potential tamper attempt
+                # Credentials belong to different users - in vault-centric approach, this might be OK
+                # if both users have vault access, but for now we'll keep the strict checking
                 log_entry = self.repo.create(
                     vault_id=vault_id,
                     user_id=None,
@@ -76,7 +77,7 @@ class AuthenticationFlow:
                 )
                 self.session_manager.clear_sessions_for_vault(vault_id)
                 return log_entry, 'no_access'
-            
+
             # Both valid for same user - immediate dual auth success
             user_id = nfc_user
             method_used = f"DUAL: NFC:{nfc} + PIN:{pin}"
@@ -177,7 +178,7 @@ class AuthenticationFlow:
             )
             return log_entry, 'unlock'
 
-    def second_factor(self, vault_id: int, details: str) -> Tuple[Optional[Log], str]:
+    def second_factor(self, vault_id: str, details: str) -> Tuple[Optional[Log], str]:
         """
         Handle second factor authentication when first factor is pending in session.
         
@@ -197,13 +198,13 @@ class AuthenticationFlow:
         second_method = None
         method_used = None
         
-        # Determine and validate the second credential type
+        # Determine and validate the second credential type using vault-centric approach
         if nfc:
-            user_id, method_used = self.validator.validate_credential(nfc, is_nfc=True)
+            user_id, method_used = self.validator.validate_credential_for_vault(nfc, is_nfc=True, vault_id=vault_id, access_controller=self.access_controller)
             if user_id:
                 second_method = "NFC"
         elif pin:
-            user_id, method_used = self.validator.validate_credential(pin, is_nfc=False)
+            user_id, method_used = self.validator.validate_credential_for_vault(pin, is_nfc=False, vault_id=vault_id, access_controller=self.access_controller)
             if user_id:
                 second_method = "PIN"
         
@@ -216,9 +217,9 @@ class AuthenticationFlow:
         
         # Retrieve pending session for this user-vault pair
         session_key = self.session_manager.get_session_key(vault_id, user_id)
-        
+
         if session_key not in self.session_manager.auth_sessions:
-            # No pending session found - treat as invalid (not a second factor attempt)
+            # No pending session found for this user-vault pair
             return None, 'no_pending_session'
         
         session = self.session_manager.auth_sessions[session_key]

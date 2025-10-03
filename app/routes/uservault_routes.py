@@ -82,7 +82,7 @@ def get_association(association_id: int, db: Session = Depends(get_db)):
 # Delete association by user and vault IDs
 # -----------------------------
 @router.delete("/{user_id}/{vault_id}", response_model=Response)
-def delete_association(user_id: int, vault_id: int, db: Session = Depends(get_db)):
+def delete_association(user_id: int, vault_id: str, db: Session = Depends(get_db)):
     """
     Removes a user from a vault.
     - Raises 404 if association not found.
@@ -108,7 +108,7 @@ def get_vaults_for_user(user_id: int, db: Session = Depends(get_db)):
 # Get users for a vault
 # -----------------------------
 @router.get("/vaults/{vault_id}/users", response_model=List[UserRead])
-def get_users_for_vault(vault_id: int, db: Session = Depends(get_db)):
+def get_users_for_vault(vault_id: str, db: Session = Depends(get_db)):
     """
     Returns all users with access to a vault.
     - Raises 404 if vault not found (optional).
@@ -120,7 +120,7 @@ def get_users_for_vault(vault_id: int, db: Session = Depends(get_db)):
 # Check user access to vault
 # -----------------------------
 @router.get("/access/{user_id}/{vault_id}", response_model=Response[bool])
-def check_access(user_id: int, vault_id: int, db: Session = Depends(get_db)):
+def check_access(user_id: int, vault_id: str, db: Session = Depends(get_db)):
     """
     Checks if a user has access to a vault.
     """

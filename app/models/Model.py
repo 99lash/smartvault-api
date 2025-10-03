@@ -2,10 +2,11 @@ from sqlmodel import SQLModel, Field
 from typing import Optional
 from datetime import datetime
 
-# Reusable base class that inherets from SQLModel
+# Reusable base class that inherits from SQLModel
 class Model(SQLModel):
-    id: Optional[int] = Field(default=None, primary_key=True)                       
-    created_at: datetime = Field(default_factory=datetime.utcnow, nullable=False)   
-    updated_at: Optional[datetime] = None
+    # Auto-incrementing integer primary key
+    id: int = Field(primary_key=True)
+    created_at: datetime = Field(default_factory=datetime.utcnow, nullable=False)
+    updated_at: Optional[datetime] = Field(default=None, nullable=True)
     # 👇 Soft delete field
-    deleted_at: Optional[datetime] = None
+    deleted_at: Optional[datetime] = Field(default=None, nullable=True)

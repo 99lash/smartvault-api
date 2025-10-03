@@ -19,7 +19,7 @@ class UserVaultService:
 
     # --- Basic CRUD Operations ---
 
-    def create_association(self, user_id: int, vault_id: int) -> UserVault:
+    def create_association(self, user_id: int, vault_id: str) -> UserVault:
         """Create a user-vault association (add user to vault)"""
         # Check if association already exists
         existing = self.repo.get_by_user_and_vault(user_id, vault_id)
@@ -31,7 +31,7 @@ class UserVaultService:
         """Fetch a user-vault association by ID"""
         return self.repo.get_by_id(association_id)
 
-    def delete_association(self, user_id: int, vault_id: int) -> UserVault | None:
+    def delete_association(self, user_id: int, vault_id: str) -> UserVault | None:
         """Delete a user-vault association (remove user from vault)"""
         association = self.repo.get_by_user_and_vault(user_id, vault_id)
         if not association:
@@ -40,18 +40,18 @@ class UserVaultService:
 
     # --- Access Management Operations ---
 
-    def add_user_to_vault(self, user_id: int, vault_id: int) -> UserVault:
+    def add_user_to_vault(self, user_id: int, vault_id: str) -> UserVault:
         """Add a user to a vault with access validation"""
         # Optional: Could add checks like user exists, vault exists, etc.
         # via UserService and VaultService if injected
         return self.create_association(user_id, vault_id)
 
-    def remove_user_from_vault(self, user_id: int, vault_id: int) -> bool:
+    def remove_user_from_vault(self, user_id: int, vault_id: str) -> bool:
         """Remove a user from a vault"""
         deleted = self.delete_association(user_id, vault_id)
         return deleted is not None
 
-    def has_user_access_to_vault(self, user_id: int, vault_id: int) -> bool:
+    def has_user_access_to_vault(self, user_id: int, vault_id: str) -> bool:
         """Check if a user has access to a specific vault"""
         return self.repo.has_access(user_id, vault_id)
 
@@ -61,7 +61,7 @@ class UserVaultService:
         """Get all vaults accessible to a user"""
         return self.repo.get_vaults_for_user(user_id)
 
-    def get_users_for_vault(self, vault_id: int) -> List[User]:
+    def get_users_for_vault(self, vault_id: str) -> List[User]:
         """Get all users with access to a vault"""
         return self.repo.get_users_for_vault(vault_id)
 
@@ -71,7 +71,7 @@ class UserVaultService:
 
     # --- Bulk Operations ---
 
-    def add_users_to_vault(self, user_ids: List[int], vault_id: int) -> List[UserVault]:
+    def add_users_to_vault(self, user_ids: List[int], vault_id: str) -> List[UserVault]:
         """Add multiple users to a vault"""
         associations = []
         for user_id in user_ids:
@@ -83,7 +83,7 @@ class UserVaultService:
                 pass
         return associations
 
-    def remove_users_from_vault(self, user_ids: List[int], vault_id: int) -> int:
+    def remove_users_from_vault(self, user_ids: List[int], vault_id: str) -> int:
         """Remove multiple users from a vault"""
         removed_count = 0
         for user_id in user_ids:

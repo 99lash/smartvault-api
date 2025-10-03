@@ -5,7 +5,7 @@ class SecurityPolicy:
     Manages security policies for authentication, such as dual-factor requirements.
     """
     
-    def requires_dual_auth(self, vault_id: int) -> bool:
+    def requires_dual_auth(self, vault_id: str) -> bool:
         """
         Determine if a vault requires dual-factor authentication.
         

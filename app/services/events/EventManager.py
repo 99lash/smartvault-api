@@ -23,10 +23,10 @@ class EventManager:
     
     def __init__(self, redis_client: Redis):
         self.redis_client = redis_client
-        self.connections: Dict[int, Set[WebSocket]] = {}  # vault_id -> set of active WS
-        self.listeners: Dict[int, asyncio.Task] = {}  # vault_id -> pubsub listener task
-        
-    async def connect(self, websocket: WebSocket, vault_id: int, prefixes: list[str]):
+        self.connections: Dict[str, Set[WebSocket]] = {}  # vault_id -> set of active WS
+        self.listeners: Dict[str, asyncio.Task] = {}  # vault_id -> pubsub listener task
+
+    async def connect(self, websocket: WebSocket, vault_id: str, prefixes: list[str]):
         """
         Connect a WebSocket client and subscribe to vault events.
         
@@ -59,7 +59,7 @@ class EventManager:
         # Start heartbeat for this connection
         asyncio.create_task(self._heartbeat(websocket))
         
-    async def _listen_for_vault_events(self, vault_id: int):
+    async def _listen_for_vault_events(self, vault_id: str):
         """
         Background task: Listen to Redis channel for new logs and broadcast to WS clients.
         
@@ -85,7 +85,7 @@ class EventManager:
             if vault_id in self.listeners:
                 self.listeners.pop(vault_id, None)
     
-    async def _broadcast_to_vault(self, vault_id: int, log_data: dict):
+    async def _broadcast_to_vault(self, vault_id: str, log_data: dict):
         """
         Broadcast a new log to all connected WS for a vault.
         
@@ -128,7 +128,7 @@ class EventManager:
             except Exception:
                 break  # Connection closed
     
-    async def disconnect(self, websocket: WebSocket, vault_id: int):
+    async def disconnect(self, websocket: WebSocket, vault_id: str):
         """
         Disconnect a WS client from a vault.
         
