@@ -63,13 +63,13 @@ class SessionManager:
             Optional[int]: User ID if found and authorized for vault, None otherwise.
         """
         from app.services.Logs.VaultAccessControllerService import VaultAccessController
-        from app.repositories.UserVaultRepository import UserVaultRepository
+        from app.repositories.VaultMembershipRepository import VaultMembershipRepository
         from app.core.database import SessionLocal
 
         db = SessionLocal()
         try:
-            uv_repo = UserVaultRepository(db)
-            controller = VaultAccessController(uv_repo)
+            vault_membership_repo = VaultMembershipRepository(db)
+            controller = VaultAccessController(vault_membership_repo)
             return validator.extract_user_id_from_details_for_vault(details, vault_id, controller)
         finally:
             db.close()

@@ -86,7 +86,7 @@ class CredentialValidator:
                     return card.user_id, f"NFC: {credential}"
         else:
             # Validate PIN code - check against all users who have vault access
-            authorized_users = access_controller.user_vault_repo.get_users_for_vault(vault_id)
+            authorized_users = access_controller.vault_membership_repo.get_users_for_vault(vault_id)
             authorized_user_ids = [user.id for user in authorized_users]
 
             # Check if PIN belongs to any authorized user

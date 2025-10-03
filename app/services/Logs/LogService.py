@@ -2,7 +2,7 @@ from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 from typing import List, Optional, Dict
 from app.repositories.LogRepository import LogRepository
-from app.repositories.UserVaultRepository import UserVaultRepository
+from app.repositories.VaultMembershipRepository import VaultMembershipRepository
 from app.repositories.NfcCardRepository import NfcCardRepository
 from app.repositories.KeyPadPinsRepository import KeypadPinsRepository
 from app.models.Log import Log, LogEventType
@@ -36,13 +36,13 @@ class LogService:
         """
         # Initialize repository with a database session
         self.repo = LogRepository(db)
-        self.user_vault_repo = UserVaultRepository(db)
+        self.vault_membership_repo = VaultMembershipRepository(db)
         self.nfc_repo = NfcCardRepository(db)
         self.pin_repo = KeypadPinsRepository(db)
         self.vault_repo = None  # Will be initialized when needed for device_id lookup
         self.validator = CredentialValidator(self.nfc_repo, self.pin_repo)
         self.session_manager = SessionManager()
-        self.access_controller = VaultAccessController(self.user_vault_repo)
+        self.access_controller = VaultAccessController(self.vault_membership_repo)
         self.security_policy = SecurityPolicy()
         self.auth_flow = AuthenticationFlow(self.validator, self.session_manager, self.access_controller, self.security_policy, self.repo)
 

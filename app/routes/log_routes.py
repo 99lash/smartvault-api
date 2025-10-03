@@ -17,7 +17,7 @@ from pydantic import BaseModel
 from app.services.VaultService import VaultService
 from app.services.UserService import UserService
 from app.services.Logs.VaultAccessControllerService import VaultAccessController
-from app.repositories.UserVaultRepository import UserVaultRepository
+from app.repositories.VaultMembershipRepository import VaultMembershipRepository
 
 class ValidateAccessRequest(BaseModel):
     vault_id: str
@@ -182,8 +182,8 @@ def get_filtered_logs(
         List[dict]: Filtered and serialized logs, ordered by timestamp descending.
     """
     # Check vault access
-    user_vault_repo = UserVaultRepository(db)
-    controller = VaultAccessController(user_vault_repo)
+    vault_membership_repo = VaultMembershipRepository(db)
+    controller = VaultAccessController(vault_membership_repo)
     if not controller.check_access(current_user.id, vault_id):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

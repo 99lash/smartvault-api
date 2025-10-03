@@ -273,12 +273,20 @@ class UserService:
                 detail="Target user not found"
             )
 
-        # Import UserVaultService here to avoid circular imports
-        from app.services.UserVaultService import UserVaultService
+        # Import VaultMembershipService here to avoid circular imports
+        from app.services.VaultMembershipService import VaultMembershipService
 
         try:
-            vault_service = UserVaultService(self.db)
-            shared_users = vault_service.get_users_sharing_vault_access(target_user_id)
+            vault_service = VaultMembershipService(self.db)
+            shared_user_ids = vault_service.get_users_sharing_vault_access(target_user_id)
+
+            # Convert user IDs to User objects
+            shared_users = []
+            for user_id in shared_user_ids:
+                user = self.get_user_by_id(user_id)
+                if user:
+                    shared_users.append(user)
+
             return shared_users
         except HTTPException:
             # Re-raise HTTP exceptions as-is

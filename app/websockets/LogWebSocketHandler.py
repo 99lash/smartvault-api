@@ -5,7 +5,7 @@ from app.services.Logs.AuthHandlerService import AuthHandlerService
 from app.services.Logs.VaultAccessControllerService import VaultAccessController
 from app.services.Logs.LogQueryService import LogQueryService
 from app.services.UserService import UserService
-from app.repositories.UserVaultRepository import UserVaultRepository
+from app.repositories.VaultMembershipRepository import VaultMembershipRepository
 from app.models.Log import LogEventType
 from app.core.database import SessionLocal
 import logging
@@ -78,8 +78,8 @@ class LogWebSocketHandler:
                 
                 # Check vault access
                 print(f"WS: Checking vault access for user {user.id} (username: {user.username}), vault {vault_id}")
-                user_vault_repo = UserVaultRepository(db)
-                controller = VaultAccessController(user_vault_repo)
+                vault_membership_repo = VaultMembershipRepository(db)
+                controller = VaultAccessController(vault_membership_repo)
                 access_result = controller.check_access(user.id, vault_id)
                 print(f"WS: Vault access check result: {access_result} for user {user.id}, vault {vault_id}")
                 if not access_result:

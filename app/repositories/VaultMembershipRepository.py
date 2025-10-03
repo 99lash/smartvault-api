@@ -76,3 +76,56 @@ class VaultMembershipRepository(Repository):
             self.db.commit()
             return True
         return False
+
+    def get_vaults_for_user(self, user_id: int):
+        """Get all vaults accessible to a user"""
+        from app.models.Vault import Vault
+        return (
+            self.db.query(Vault)
+            .join(self.model, Vault.id == self.model.vault_id)
+            .filter(self.model.user_id == user_id)
+            .all()
+        )
+
+    def get_users_for_vault(self, vault_id: int):
+        """Get all users with access to a vault"""
+        from app.models.User import User
+        return (
+            self.db.query(User)
+            .join(self.model, User.id == self.model.user_id)
+            .filter(self.model.vault_id == vault_id)
+            .filter(User.deleted_at == None)  # Exclude soft-deleted users
+            .all()
+        )
+
+    def get_users_sharing_vault_access(self, user_id: int):
+        """
+        Get all users who share vault access with the specified user.
+        Uses a subquery to find users who have access to the same vaults.
+
+        Args:
+            user_id: The user ID to find shared vault access for
+
+        Returns:
+            List of User objects who share at least one vault with the specified user
+        """
+        from app.models.User import User
+
+        # First, get all vault IDs that the specified user has access to
+        user_vaults_subquery = (
+            self.db.query(self.model.vault_id)
+            .filter(self.model.user_id == user_id)
+            .subquery()
+        )
+
+        # Then, find all users who have access to those same vaults (excluding the user themselves)
+        shared_users = (
+            self.db.query(User)
+            .join(self.model, User.id == self.model.user_id)
+            .filter(self.model.vault_id.in_(user_vaults_subquery))
+            .filter(User.id != user_id)  # Exclude the user themselves
+            .distinct()
+            .all()
+        )
+
+        return shared_users

@@ -194,3 +194,49 @@ def update_vault_status(vault_id: str, payload: UpdateVaultStatus, db: Session =
     if not vault:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vault not found")
     return Response(success=True, detail=f"Vault {vault_id} status updated to {payload.status}")
+
+# -----------------------------
+# Check if user is admin of vault
+# -----------------------------
+@router.get("/{vault_id}/admin-check", response_model=Response[dict])
+def check_vault_admin(
+    vault_id: int,
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db)
+):
+    """
+    Check if current user has admin access to vault.
+
+    **Requirements:**
+    - User must be authenticated
+    - Returns admin status for the specified vault
+    """
+    try:
+        # Manual token validation
+        if not authorization or not authorization.startswith("Bearer "):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Authentication required"
+            )
+
+        token = authorization.split(" ")[1]
+        user_service = UserService(db)
+        current_user = user_service.validate_token(token)
+
+        # Check if user has admin access to the vault
+        membership_service = VaultMembershipService(db)
+        is_admin = membership_service.is_user_admin_of_vault(current_user.id, vault_id)
+
+        return Response(
+            success=True,
+            data={
+                "is_admin": is_admin,
+                "vault_id": vault_id,
+                "user_id": current_user.id
+            }
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))

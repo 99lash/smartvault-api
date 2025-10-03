@@ -65,3 +65,15 @@ class VaultMembershipService:
     def is_user_admin_of_vault(self, user_id: int, vault_id: str) -> bool:
         """Check if user is an admin of the vault"""
         return self.user_has_role_in_vault(user_id, vault_id, MembershipRole.admin)
+
+    def get_users_sharing_vault_access(self, user_id: int) -> List[int]:
+        """
+        Get all users who share vault access with the specified user.
+
+        Args:
+            user_id: The user ID to find shared vault access for
+
+        Returns:
+            List of User IDs who share at least one vault with the specified user
+        """
+        return self.repo.get_users_sharing_vault_access(user_id)
