@@ -6,11 +6,11 @@ from app.repositories.VaultMembershipRepository import VaultMembershipRepository
 from app.repositories.NfcCardRepository import NfcCardRepository
 from app.repositories.KeyPadPinsRepository import KeypadPinsRepository
 from app.models.Log import Log, LogEventType
-from app.services.Logs.SecurityPolicy import SecurityPolicy
-from app.services.Logs.CredentialValidatorService import CredentialValidator
-from app.services.Logs.SessionManagerService import SessionManager
-from app.services.Logs.VaultAccessControllerService import VaultAccessController
-from app.services.Logs.AuthenticationFlowService import AuthenticationFlow
+from app.services.logs.SecurityPolicy import SecurityPolicy
+from app.services.logs.CredentialValidatorService import CredentialValidator
+from app.services.logs.SessionManagerService import SessionManager
+from app.services.logs.VaultAccessControllerService import VaultAccessController
+from app.services.logs.AuthenticationFlowService import AuthenticationFlow
 import json
 import time
 

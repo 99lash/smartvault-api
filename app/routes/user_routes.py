@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.schemas.user import UserCreate,UserRegister, UserLogin, UpdateUserRole, UserRead
 from app.schemas.Response import Response
-from app.services.UserService import UserService
+from app.services.users.UserService import UserService
 from app.models.User import User, UserRole
 from jose import JWTError, jwt as jose_jwt
 from app.core.config import settings

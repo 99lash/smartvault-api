@@ -4,7 +4,7 @@ import time
 class SessionManager:
     auth_sessions: Dict[str, Dict] = {}
 
-    def get_session_key(self, vault_id: str, user_id: int) -> str:
+    def get_session_key(self, vault_id: int, user_id: int) -> str:
         """
         Generate a unique session key for tracking multi-factor authentication state.
         
@@ -37,7 +37,7 @@ class SessionManager:
         for key in expired_keys:
             del SessionManager.auth_sessions[key]
 
-    def clear_sessions_for_vault(self, vault_id: str):
+    def clear_sessions_for_vault(self, vault_id: int):
         """
         Clear all authentication sessions for a specific vault.
 
@@ -50,7 +50,7 @@ class SessionManager:
         for key in keys_to_delete:
             del SessionManager.auth_sessions[key]
 
-    def find_user_for_vault_session(self, vault_id: str, details: str, validator) -> Optional[int]:
+    def find_user_for_vault_session(self, vault_id: int, details: str, validator) -> Optional[int]:
         """
         Find user_id for a vault session using vault-centric credential validation.
 

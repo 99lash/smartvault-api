@@ -6,7 +6,7 @@ class VaultAccessController:
     def __init__(self, vault_membership_repo: VaultMembershipRepository):
         self.vault_membership_repo = vault_membership_repo
 
-    def check_access(self, user_id: int, vault_id: str) -> bool:
+    def check_access(self, user_id: int, vault_id: int) -> bool:
         """
         Check if the user has access to the specified vault.
 

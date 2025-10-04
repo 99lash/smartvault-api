@@ -5,8 +5,8 @@ from app.schemas.log import LogCreate, LogRead, LogVaultSummaryRead, LogUserSumm
 from app.schemas.LogSchemas import WSQueryRequest, LogResponse
 from sqlalchemy.orm import Session
 from app.core.database import get_db
-from app.services.Logs.LogService import LogService
-from app.services.Logs.LogQueryService import LogQueryService
+from app.services.logs.LogService import LogService
+from app.services.logs.LogQueryService import LogQueryService
 from app.websockets.LogWebSocketHandler import LogWebSocketHandler
 from app.websockets.QueryWebSocketHandler import QueryWebSocketHandler
 from app.models.Log import LogEventType
@@ -14,13 +14,13 @@ from app.models.User import User, UserRole
 from app.schemas.Response import Response
 from app.core.database import SessionLocal
 from pydantic import BaseModel
-from app.services.VaultService import VaultService
-from app.services.UserService import UserService
-from app.services.Logs.VaultAccessControllerService import VaultAccessController
+from app.services.vaults.VaultService import VaultService
+from app.services.users.UserService import UserService
+from app.services.logs.VaultAccessControllerService import VaultAccessController
 from app.repositories.VaultMembershipRepository import VaultMembershipRepository
 
 class ValidateAccessRequest(BaseModel):
-    vault_id: str
+    vault_id: int
     details: str
 
 class LogBulkDeleteRequest(BaseModel):
@@ -167,7 +167,7 @@ def bulk_delete_logs(
 
 @router.get("/vault/{vault_id}/filtered")
 def get_filtered_logs(
-    vault_id: str,
+    vault_id: int,
     prefixes: str = "DUAL,Tamper,Failure,Manual",
     current_user: User = Depends(UserService.get_current_user),
     db: Session = Depends(get_db)

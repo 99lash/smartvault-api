@@ -46,7 +46,7 @@ class VaultService:
         )
 
     # Fetch a vault by ID (serial number)
-    def get_vault_by_id(self, vault_id: str) -> Vault | None:
+    def get_vault_by_id(self, vault_id: int) -> Vault | None:
         return self.repo.get_by_id(vault_id)
 
     # Fetch a vault by name
@@ -58,19 +58,19 @@ class VaultService:
         return self.repo.get_all()
 
     # Delete a vault by ID (serial number)
-    def delete_vault(self, vault_id: str) -> Vault | None:
+    def delete_vault(self, vault_id: int) -> Vault | None:
         return self.repo.delete(vault_id)
 
     # Update a vault's status
-    def update_vault_status(self, vault_id: str, status: VaultStatus) -> Vault | None:
+    def update_vault_status(self, vault_id: int, status: VaultStatus) -> Vault | None:
         return self.repo.update(vault_id, status=status)
 
     # Optional: restore a soft-deleted vault
-    def restore_vault(self, vault_id: str) -> Vault | None:
+    def restore_vault(self, vault_id: int) -> Vault | None:
         return self.repo.restore(vault_id)
 
     # Hard delete a vault (permanent removal)
-    def hard_delete_vault(self, vault_id: str) -> Vault | None:
+    def hard_delete_vault(self, vault_id: int) -> Vault | None:
         """
         Permanently delete a vault and all associated data.
         WARNING: This action cannot be undone!

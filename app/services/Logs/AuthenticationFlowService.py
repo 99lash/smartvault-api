@@ -1,9 +1,9 @@
 from typing import Optional, Tuple
 from datetime import datetime
-from app.services.Logs.CredentialValidatorService import CredentialValidator
-from app.services.Logs.SessionManagerService import SessionManager
-from app.services.Logs.VaultAccessControllerService import VaultAccessController
-from app.services.Logs.SecurityPolicy import SecurityPolicy
+from app.services.logs.CredentialValidatorService import CredentialValidator
+from app.services.logs.SessionManagerService import SessionManager
+from app.services.logs.VaultAccessControllerService import VaultAccessController
+from app.services.logs.SecurityPolicy import SecurityPolicy
 from app.repositories.LogRepository import LogRepository
 from app.models.Log import Log, LogEventType
 import time
@@ -16,7 +16,7 @@ class AuthenticationFlow:
         self.security_policy = security_policy
         self.repo = repo
 
-    def progressive_access(self, vault_id: str, details: str) -> Tuple[Optional[Log], str]:
+    def progressive_access(self, vault_id: int, details: str) -> Tuple[Optional[Log], str]:
         """
         Progressive authentication that builds up factors and can operate in multiple modes:
         1. Single auth mode: First valid credential grants access
@@ -178,7 +178,7 @@ class AuthenticationFlow:
             )
             return log_entry, 'unlock'
 
-    def second_factor(self, vault_id: str, details: str) -> Tuple[Optional[Log], str]:
+    def second_factor(self, vault_id: int, details: str) -> Tuple[Optional[Log], str]:
         """
         Handle second factor authentication when first factor is pending in session.
         

@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from typing import Optional, List
 from app.core.database import get_db
 from app.services.NfcCardService import NfcCardService
-from app.services.UserService import UserService
+from app.services.users.UserService import UserService
 from app.schemas.nfc_card import NfcCardCreate, NfcCardAssign, NfcCardRead
 from app.schemas.Response import Response
 

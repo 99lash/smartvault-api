@@ -62,7 +62,7 @@ class CredentialValidator:
                 
         return nfc, pin
 
-    def validate_credential_for_vault(self, credential: str, is_nfc: bool, vault_id: str, access_controller) -> tuple[Optional[int], Optional[str]]:
+    def validate_credential_for_vault(self, credential: str, is_nfc: bool, vault_id: int, access_controller) -> tuple[Optional[int], Optional[str]]:
         """
         Validate a credential against users who have access to a specific vault.
         This is the vault-centric approach.
@@ -114,7 +114,7 @@ class CredentialValidator:
                 return record.user_id, f"PIN: {credential}"
         return None, None
 
-    def extract_user_id_from_details_for_vault(self, details: str, vault_id: str, access_controller) -> Optional[int]:
+    def extract_user_id_from_details_for_vault(self, details: str, vault_id: int, access_controller) -> Optional[int]:
         """
         Extract user_id from credential details using vault-centric approach.
 

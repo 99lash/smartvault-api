@@ -2,9 +2,9 @@ from fastapi import APIRouter, Depends, HTTPException, status, Header
 from sqlalchemy.orm import Session
 from typing import Optional
 from app.core.database import get_db
-from app.services.VaultService import VaultService
-from app.services.VaultMembershipService import VaultMembershipService
-from app.services.UserService import UserService
+from app.services.vaults.VaultService import VaultService
+from app.services.vaults.VaultMembershipService import VaultMembershipService
+from app.services.users.UserService import UserService
 from app.models.VaultMembership import MembershipRole
 from app.schemas.vault import VaultCreate, UpdateVaultStatus, VaultRead
 from app.schemas.Response import Response
@@ -108,7 +108,7 @@ def list_vaults(db: Session = Depends(get_db)):
 # Get a vault by ID
 # -----------------------------
 @router.get("/{vault_id}", response_model=VaultRead)
-def get_vault(vault_id: str, db: Session = Depends(get_db)):
+def get_vault(vault_id: int, db: Session = Depends(get_db)):
     """
     Fetch a single vault by ID.
     - Raises 404 if vault not found.
@@ -123,7 +123,7 @@ def get_vault(vault_id: str, db: Session = Depends(get_db)):
 # Soft delete a vault
 # -----------------------------
 @router.delete("/{vault_id}", response_model=Response)
-def delete_vault(vault_id: str, db: Session = Depends(get_db)):
+def delete_vault(vault_id: int, db: Session = Depends(get_db)):
     """
     Soft deletes a vault by ID.
     - Raises 404 if vault not found.
@@ -139,7 +139,7 @@ def delete_vault(vault_id: str, db: Session = Depends(get_db)):
 # -----------------------------
 @router.delete("/{vault_id}/hard", response_model=Response)
 def hard_delete_vault(
-    vault_id: str,
+    vault_id: int,
     authorization: Optional[str] = Header(None),
     db: Session = Depends(get_db)
 ):
@@ -183,7 +183,7 @@ def hard_delete_vault(
 # Update a vault's status
 # -----------------------------
 @router.patch("/{vault_id}/status", response_model=Response)
-def update_vault_status(vault_id: str, payload: UpdateVaultStatus, db: Session = Depends(get_db)):
+def update_vault_status(vault_id: int, payload: UpdateVaultStatus, db: Session = Depends(get_db)):
     """
     Update the status of a vault.
     - Example: locked, unlocked, tampered.

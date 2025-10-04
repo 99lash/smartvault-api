@@ -274,19 +274,11 @@ class UserService:
             )
 
         # Import VaultMembershipService here to avoid circular imports
-        from app.services.VaultMembershipService import VaultMembershipService
+        from app.services.vaults.VaultMembershipService import VaultMembershipService
 
         try:
             vault_service = VaultMembershipService(self.db)
-            shared_user_ids = vault_service.get_users_sharing_vault_access(target_user_id)
-
-            # Convert user IDs to User objects
-            shared_users = []
-            for user_id in shared_user_ids:
-                user = self.get_user_by_id(user_id)
-                if user:
-                    shared_users.append(user)
-
+            shared_users = vault_service.get_users_sharing_vault_access(target_user_id)
             return shared_users
         except HTTPException:
             # Re-raise HTTP exceptions as-is

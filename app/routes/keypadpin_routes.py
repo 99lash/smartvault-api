@@ -4,7 +4,7 @@ from app.core.database import get_db
 from app.services.KeypadPinsService import KeypadPinsService
 from app.schemas.Response import Response
 from app.schemas.keypad_pin import KeypadPinCreate, KeypadPinAssign, KeypadPinRead
-from app.services.UserService import UserService
+from app.services.users.UserService import UserService
 # -----------------------------
 # FastAPI router for KeypadPins endpoints
 # -----------------------------

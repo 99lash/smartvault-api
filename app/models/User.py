@@ -21,11 +21,13 @@ class UserRole(str, enum.Enum):
 # It inherits from Model(Model is a Base model that inherets SQLModel, open Model.py for more documentation)
 class User(Model, table=True):
     __tablename__ = "users" # Explicitly sets the table’s name in the database as users, Without this, SQLModel would usually just guess from the class name (user).
-    
+
     username: str = Field(index=True, unique=True, nullable=False) # Defines a column named username.
     email: str = Field(index=True, unique=True, nullable=False)    # Defines a column named eamil.
     password_hash: str                                             # Defines a column named password_hash.
     role: UserRole = Field(default=UserRole.user, nullable=False)  # Defines a column named role.
+    first_name: str | None = Field(default=None, nullable=True)    # Defines a column named first_name.
+    last_name: str | None = Field(default=None, nullable=True)     # Defines a column named last_name.
 
     # Relationships
     logs: Optional[List["Log"]] = Relationship(back_populates="user")
