@@ -1,9 +1,9 @@
 from typing import Optional, Tuple
 from datetime import datetime
-from app.services.logs.CredentialValidatorService import CredentialValidator
-from app.services.logs.SessionManagerService import SessionManager
-from app.services.logs.VaultAccessControllerService import VaultAccessController
-from app.services.logs.SecurityPolicy import SecurityPolicy
+from app.services.Logs.CredentialValidatorService import CredentialValidator
+from app.services.Logs.SessionManagerService import SessionManager
+from app.services.Logs.VaultAccessControllerService import VaultAccessController
+from app.services.Logs.SecurityPolicy import SecurityPolicy
 from app.repositories.LogRepository import LogRepository
 from app.models.Log import Log, LogEventType
 import time

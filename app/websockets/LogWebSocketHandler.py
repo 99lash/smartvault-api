@@ -1,9 +1,9 @@
 from fastapi import WebSocket, WebSocketDisconnect
 from app.schemas.log import LogCreate
-from app.services.logs.LogService import LogService
-from app.services.logs.AuthHandlerService import AuthHandlerService
-from app.services.logs.VaultAccessControllerService import VaultAccessController
-from app.services.logs.LogQueryService import LogQueryService
+from app.services.Logs.LogService import LogService
+from app.services.Logs.AuthHandlerService import AuthHandlerService
+from app.services.Logs.VaultAccessControllerService import VaultAccessController
+from app.services.Logs.LogQueryService import LogQueryService
 from app.services.users.UserService import UserService
 from app.repositories.VaultMembershipRepository import VaultMembershipRepository
 from app.models.Log import LogEventType

@@ -1,5 +1,5 @@
 from typing import Dict, Optional
-from app.services.logs.LogService import LogService
+from app.services.Logs.LogService import LogService
 from app.schemas.log import LogCreate
 from app.models.Log import Log
 

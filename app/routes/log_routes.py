@@ -5,8 +5,8 @@ from app.schemas.log import LogCreate, LogRead, LogVaultSummaryRead, LogUserSumm
 from app.schemas.LogSchemas import WSQueryRequest, LogResponse
 from sqlalchemy.orm import Session
 from app.core.database import get_db
-from app.services.logs.LogService import LogService
-from app.services.logs.LogQueryService import LogQueryService
+from app.services.Logs.LogService import LogService
+from app.services.Logs.LogQueryService import LogQueryService
 from app.websockets.LogWebSocketHandler import LogWebSocketHandler
 from app.websockets.QueryWebSocketHandler import QueryWebSocketHandler
 from app.models.Log import LogEventType
@@ -16,7 +16,7 @@ from app.core.database import SessionLocal
 from pydantic import BaseModel
 from app.services.vaults.VaultService import VaultService
 from app.services.users.UserService import UserService
-from app.services.logs.VaultAccessControllerService import VaultAccessController
+from app.services.Logs.VaultAccessControllerService import VaultAccessController
 from app.repositories.VaultMembershipRepository import VaultMembershipRepository
 
 class ValidateAccessRequest(BaseModel):
