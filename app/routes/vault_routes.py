@@ -28,9 +28,8 @@ router = APIRouter(prefix="/vaults", tags=["vaults"])
 def create_vault(
     payload: VaultCreate,
     db: Session = Depends(get_db),
-    # authorization: Optional[str] = Header(None), # Same lang ito sa ng nasa baba.
-    # current_user = Depends(get_current_user) # Same lang ito sa authorization argument (above)
-    current_user = Depends(UserService.get_current_user) # Eto mas safe
+    # authorization: Optional[str] = Header(None), # Uncomment mo nalang ito pag ayaw gumana sa iyo.
+    current_user = Depends(get_current_user) # i-comment mo nalang ito kapag ayaw gumana pati sa loob ng dependencies.py 
 ):
     """
     Create a new vault with device_id as the primary identifier.
