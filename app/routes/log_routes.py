@@ -18,6 +18,7 @@ from app.services.vaults.VaultService import VaultService
 from app.services.users.UserService import UserService
 from app.services.Logs.VaultAccessControllerService import VaultAccessController
 from app.repositories.VaultMembershipRepository import VaultMembershipRepository
+# from app.models.Log import Log;
 
 class ValidateAccessRequest(BaseModel):
     vault_id: int
@@ -198,6 +199,35 @@ def get_filtered_logs(
     # Serialize with LogResponse for consistency
     serialized_logs = [LogResponse(**log).model_dump() for log in logs]
     return serialized_logs
+
+
+# -----------------------------
+# TESTING ENDPOINT POST /test 
+# -----------------------------
+#
+# # @router.post("/test", status_code=status.HTTP_201_CREATED)
+# def create_log_test(payload: LogCreate, db: Session = Depends(get_db)):
+#     try:
+#         log = Log(
+#             device_id=payload.device_id,
+#             user_id=payload.user_id,
+#             event_type=payload.event_type,
+#             details=payload.details
+#         )
+#         db.add(log)
+#         db.commit()
+#         db.refresh(log)
+#         return {
+#             "success": True,
+#             "data": log,
+#             "message": "Log inserted successfully."
+#         }
+
+#     except Exception as e:
+#         raise HTTPException(
+#             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+#             detail=f"Failed to insert log: {e}"
+#         )
 
 # -----------------------------
 # WebSocket Endpoint for Real-Time Event Processing
