@@ -6,7 +6,8 @@ from app.models.Log import LogEventType
 # Log HTTP Request Schemas
 # ----------------------------
 class LogCreate(BaseModel):
-    vault_id: int = Field(..., description="The ID of the vault associated with the log")
+    # vault_id: int = Field(..., description="The ID of the vault associated with the log")
+    device_id: str
     event_type: LogEventType = Field(..., description="The type of log event")
     user_id: Optional[int] = Field(None, ge=1, description="The ID of the user who triggered the event (optional)")
     details: Optional[str] = Field(None, max_length=1000, description="Additional details about the event")
@@ -22,10 +23,9 @@ class LogCreate(BaseModel):
 # ----------------------------
 class LogRead(BaseModel):
     id: int
-    device_id: str
     user_id: Optional[int] = None
+    device_id: str
     event_type: LogEventType
-    timestamp: datetime
     created_at: datetime
     updated_at: Optional[datetime] = None
     deleted_at: Optional[datetime] = None
