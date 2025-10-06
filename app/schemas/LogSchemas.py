@@ -3,7 +3,8 @@ from typing import List, Optional
 from datetime import datetime
 
 class ValidateAccessRequest(BaseModel):
-    vault_id: int
+    # vault_id: int
+    device_id: str
     details: str
 
 class WSQueryRequest(BaseModel):
@@ -11,7 +12,8 @@ class WSQueryRequest(BaseModel):
     Pydantic model for WebSocket query request.
     Used to validate incoming parameters for filtered log queries.
     """
-    vault_id: int
+    # vault_id: int
+    device_id: str
     prefixes: List[str] = ["DUAL", "Tamper", "Failure", "Manual"]  # Default prefixes
 
 class LogResponse(BaseModel):
@@ -20,7 +22,8 @@ class LogResponse(BaseModel):
     Ensures consistent output for API/WS responses.
     """
     id: int
-    vault_id: int
+    # vault_id: int
+    device_id: str
     user_id: Optional[int] = None
     event_type: str
     details: str
