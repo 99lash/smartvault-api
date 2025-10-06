@@ -22,7 +22,7 @@ class LogCreate(BaseModel):
 # ----------------------------
 class LogRead(BaseModel):
     id: int
-    vault_id: int
+    device_id: str
     user_id: Optional[int] = None
     event_type: LogEventType
     timestamp: datetime

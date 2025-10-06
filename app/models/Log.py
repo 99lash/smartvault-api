@@ -25,7 +25,7 @@ class LogEventType(str, enum.Enum):
 class Log(Model, table=True):
     __tablename__ = "logs"
 
-    vault_id: int = Field(foreign_key="vaults.id", nullable=False)
+    device_id: str = Field(foreign_key="vaults.device_id", nullable=False)
     user_id: Optional[int] = Field(foreign_key="users.id", default=None)  # nullable if unknown intruder
     event_type: LogEventType = Field(nullable=False)
     # Use created_at from base Model instead of separate timestamp field
