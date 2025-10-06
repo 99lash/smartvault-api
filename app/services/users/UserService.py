@@ -2,6 +2,8 @@ from sqlalchemy.orm import Session
 from app.repositories.UserRepository import UserRepository
 from app.core.security import hash_password, verify_password
 from fastapi.security import HTTPBearer
+from fastapi.security import OAuth2PasswordBearer
+
 from fastapi import HTTPException, status, Depends
 from app.core.database import get_db
 from app.models.User import User, UserRole
@@ -17,7 +19,7 @@ SECRET_KEY = settings.JWT_SECRET
 ALGORITHM = settings.JWT_ALGORITHM
 ACCESS_TOKEN_EXPIRE_MINUTES = settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES
 
-bearer_scheme = HTTPBearer()
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/users/login")
 
 # -----------------------------
 # Service layer for User logic
@@ -167,8 +169,9 @@ class UserService:
             return None
         access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
         return self.create_access_token(data={"sub": user.username}, expires_delta=access_token_expires)
-
-    def get_current_user(self, token = Depends(bearer_scheme)) -> User:
+    
+    @staticmethod
+    def get_current_user(token = Depends(oauth2_scheme)) -> User:
         """
         Get current user from JWT token.
 
@@ -186,6 +189,8 @@ class UserService:
             detail="Could not validate credentials",
             headers={"WWW-Authenticate": "Bearer"},
         )
+        db = next(get_db())  # you can inject DB manually here if needed
+        repo = UserRepository(db)
 
         try:
             payload = jose_jwt.decode(token, SECRET_KEY, algorithms=settings.ALLOWED_JWT_ALGORITHMS)
@@ -196,7 +201,7 @@ class UserService:
             logging.error(f"JWT decode failed: {type(e).__name__}")
             raise credentials_exception
 
-        user = self.repo.get_by_username(username)
+        user = repo.get_by_username(username)
         if user is None:
             raise credentials_exception
         return user
