@@ -169,7 +169,7 @@ def bulk_delete_logs(
 def get_filtered_logs(
     vault_id: int,
     prefixes: str = "DUAL,Tamper,Failure,Manual",
-    current_user: User = Depends(UserService.get_current_user),
+    current_user = Depends(UserService.get_current_user),
     db: Session = Depends(get_db)
 ):
     """
