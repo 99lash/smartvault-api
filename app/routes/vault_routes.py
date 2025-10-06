@@ -8,6 +8,8 @@ from app.services.users.UserService import UserService
 from app.models.VaultMembership import MembershipRole
 from app.schemas.vault import VaultCreate, UpdateVaultStatus, VaultRead
 from app.schemas.Response import Response
+from app.core.dependencies import get_current_admin, get_current_user;
+
 # -----------------------------
 # FastAPI router for Vault endpoints
 # -----------------------------
@@ -25,8 +27,10 @@ router = APIRouter(prefix="/vaults", tags=["vaults"])
 @router.post("/", response_model=Response[VaultRead], status_code=status.HTTP_201_CREATED)
 def create_vault(
     payload: VaultCreate,
-    authorization: Optional[str] = Header(None),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    # authorization: Optional[str] = Header(None), # Same lang ito sa ng nasa baba.
+    # current_user = Depends(get_current_user) # Same lang ito sa authorization argument (above)
+    current_user = Depends(UserService.get_current_user) # Eto mas safe
 ):
     """
     Create a new vault with device_id as the primary identifier.
@@ -46,15 +50,15 @@ def create_vault(
         HTTPException: If authentication fails or vault creation fails
     """
     # Validate authentication
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authentication required to create vault"
-        )
+    # if not authorization or not authorization.startswith("Bearer "):
+    #     raise HTTPException(
+    #         status_code=status.HTTP_401_UNAUTHORIZED,
+    #         detail="Authentication required to create vault"
+    #     )
 
-    token = authorization.split(" ")[1]
-    user_service = UserService(db)
-    current_user = user_service.validate_token(token)
+    # token = authorization.split(" ")[1]
+    # user_service = UserService(db)
+    # current_user = user_service.validate_token(token)
 
     try:
         # Create the vault with device_id as primary identifier
@@ -63,7 +67,7 @@ def create_vault(
             device_id=payload.device_id,
             name=payload.name,
             location=payload.location,
-            status=payload.status
+            status=payload.status # type: ignore
         )
 
         # Automatically create admin membership for the creator
