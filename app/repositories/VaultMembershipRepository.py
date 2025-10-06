@@ -59,3 +59,15 @@ class VaultMembershipRepository(Repository):
     def delete(self, membership: VaultMembership) -> None:
         self.db.delete(membership)
         self.db.commit()
+
+    def is_user_admin_of_vault(self, user_id: int, vault_id: int) -> bool:
+        membership = (
+            self.db.query(self.model)
+            .filter(
+                self.model.user_id == user_id,
+                self.model.vault_id == vault_id,
+                self.model.role == MembershipRole.admin
+            )
+            .first()
+        )
+        return membership is not None

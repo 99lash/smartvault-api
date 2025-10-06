@@ -111,7 +111,7 @@ def update_user_role_in_vault(
         id=membership.id,
         user_id=membership.user_id,
         vault_id=membership.vault_id,
-        role=membership.role.value,
+        role=membership.role.value,  
         created_at=membership.created_at.isoformat(),
         updated_at=membership.updated_at.isoformat() if membership.updated_at else None
     )
@@ -191,7 +191,6 @@ def remove_user_from_vault(
         raise HTTPException(status_code=404, detail="User is not a member of this vault")
 
     return Response(success=True, detail=f"User {user_id} removed from vault {vault_id}")
-
 
 # -----------------------------
 # Get current user's vaults
