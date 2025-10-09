@@ -1,5 +1,5 @@
 from typing import Dict, Optional
-from app.services.Logs.LogService import LogService
+from app.services.logs.LogService import LogService
 from app.schemas.log import LogCreate
 from app.models.Log import Log
 
@@ -18,7 +18,7 @@ class AuthHandlerService:
             Dict: Formatted response (status, event_type, message, user_id).
         """
         log_entry, status = self.log_service.validate_progressive_access(
-            str(payload.vault_id), payload.details
+            payload.device_id, payload.details
         )
         
         # Response mapping
@@ -58,7 +58,7 @@ class AuthHandlerService:
             if status == 'invalid_credentials' and log_entry and "Same factor repeated" in log_entry.details:
                 resp["message"] = "Invalid second factor or same factor repeated"
             if status == 'invalid_credentials':
-                self.log_service.clear_sessions_for_vault(str(payload.vault_id))
+                self.log_service.clear_sessions_for_vault(payload.device_id)
             return resp
         else:
             return {"status": "error", "message": f"Unknown status: {status}"}

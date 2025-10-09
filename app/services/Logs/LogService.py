@@ -6,11 +6,12 @@ from app.repositories.VaultMembershipRepository import VaultMembershipRepository
 from app.repositories.NfcCardRepository import NfcCardRepository
 from app.repositories.KeyPadPinsRepository import KeypadPinsRepository
 from app.models.Log import Log, LogEventType
-from app.services.Logs.SecurityPolicy import SecurityPolicy
-from app.services.Logs.CredentialValidatorService import CredentialValidator
-from app.services.Logs.SessionManagerService import SessionManager
-from app.services.Logs.VaultAccessControllerService import VaultAccessController
-from app.services.Logs.AuthenticationFlowService import AuthenticationFlow
+from app.services.logs.SecurityPolicy import SecurityPolicy
+from app.services.logs.CredentialValidatorService import CredentialValidator
+from app.services.logs.SessionManagerService import SessionManager
+from app.services.logs.VaultAccessControllerService import VaultAccessController
+from app.services.logs.AuthenticationFlowService import AuthenticationFlow
+from app.repositories.VaultRepository import VaultRepository
 import json
 import time
 
@@ -44,7 +45,10 @@ class LogService:
         self.session_manager = SessionManager()
         self.access_controller = VaultAccessController(self.vault_membership_repo)
         self.security_policy = SecurityPolicy()
-        self.auth_flow = AuthenticationFlow(self.validator, self.session_manager, self.access_controller, self.security_policy, self.repo)
+        # Initialize vault repository for device_id to vault_id lookup
+        from app.repositories.VaultRepository import VaultRepository
+        vault_repo = VaultRepository(db)
+        self.auth_flow = AuthenticationFlow(self.validator, self.session_manager, self.access_controller, self.security_policy, self.repo, vault_repo)
 
     def _get_vault_id_by_device_id(self, device_id: str) -> int | None:
         """
@@ -94,9 +98,7 @@ class LogService:
 
         if not delete_all:
             if device_id is not None:
-                vault_id = self._get_vault_id_by_device_id(device_id)
-                if vault_id is not None:
-                    filters.append(self.repo.model.vault_id == vault_id)
+                filters.append(self.repo.model.device_id == device_id)
             if user_id is not None:
                 filters.append(self.repo.model.user_id == user_id)
             if event_type is not None:
@@ -153,13 +155,10 @@ class LogService:
             Log: The created log entry.
         """
         details = f"Unlock method: {method}"
-        vault_id = self._get_vault_id_by_device_id(device_id)
-        if vault_id is None:
-            raise ValueError(f"Vault with device_id '{device_id}' not found")
-        return self.repo.log_vault_unlock(vault_id=vault_id, user_id=user_id, details=details)
+        return self.repo.log_device_unlock(device_id=device_id, user_id=user_id, details=details)
     
     def log_failed_unlock_attempt(self, device_id: str, user_id: Optional[int] = None,
-                                   reason: str = "invalid credentials") -> Log:
+                                    reason: str = "invalid credentials") -> Log:
         """
         Log a failed unlock attempt, including failure reason for security analysis.
 
@@ -173,15 +172,15 @@ class LogService:
         """
         details = f"Failure reason: {reason}"
 
+        # Get vault_id from device_id
         vault_id = self._get_vault_id_by_device_id(device_id)
-        if vault_id is None:
-            raise ValueError(f"Vault with device_id '{device_id}' not found")
 
         return self.repo.create(
-            vault_id=vault_id,
+            device_id=device_id,
             user_id=user_id,
             event_type=LogEventType.failed_attempt,
             details=details,
+            vault_id=vault_id,
             timestamp=datetime.utcnow()
         )
     
@@ -197,10 +196,11 @@ class LogService:
             Log: The tamper log entry.
         """
         details = f"Tamper detected. Sensor data: {sensor_data}"
+
+        # Get vault_id from device_id
         vault_id = self._get_vault_id_by_device_id(device_id)
-        if vault_id is None:
-            raise ValueError(f"Vault with device_id '{device_id}' not found")
-        return self.repo.log_tamper_event(vault_id=vault_id, details=details)
+
+        return self.repo.log_tamper_event(device_id=device_id, details=details, vault_id=vault_id)
     
     def log_alarm_trigger(self, device_id: str, alarm_type: str = "general") -> Log:
         """
@@ -214,15 +214,16 @@ class LogService:
             Log: The alarm log entry.
         """
         details = f"Alarm type: {alarm_type}"
+
+        # Get vault_id from device_id
         vault_id = self._get_vault_id_by_device_id(device_id)
-        if vault_id is None:
-            raise ValueError(f"Vault with device_id '{device_id}' not found")
-        return self.repo.log_alarm_event(vault_id=vault_id, details=details)
+
+        return self.repo.log_alarm_event(device_id=device_id, details=details, vault_id=vault_id)
 
         
     def create_log(
-                     self, device_id: Optional[str], event_type: Optional[LogEventType],
-                     user_id: Optional[int] = None, details: Optional[str] = None) -> Log | None:
+                      self, device_id: Optional[str], event_type: Optional[LogEventType],
+                      user_id: Optional[int] = None, details: Optional[str] = None) -> Log | None:
         """
         Create a generic log entry for arbitrary events.
 
@@ -241,15 +242,17 @@ class LogService:
             # Skip logging incomplete events
             return None
 
-        vault_id = self._get_vault_id_by_device_id(device_id) if device_id else None
-        if device_id and vault_id is None:
-            raise ValueError(f"Vault with device_id '{device_id}' not found")
+        # Get vault_id from device_id if device_id is provided
+        vault_id = None
+        if device_id:
+            vault_id = self._get_vault_id_by_device_id(device_id)
 
         return self.repo.create(
-            vault_id=vault_id,
+            device_id=device_id,
             user_id=user_id,
             event_type=event_type,
             details=details,
+            vault_id=vault_id,
             timestamp=datetime.utcnow()
         )
 
@@ -297,23 +300,25 @@ class LogService:
         if vault_id is None:
             raise ValueError(f"Vault with device_id '{device_id}' not found")
 
-        if not self.access_controller.check_access(user_id, vault_id):
+        if not self.access_controller.check_access(user_id, device_id):
             # User authenticated but lacks permission for this vault
             # Log as tamper attempt for security monitoring
             return self.repo.create(
-                vault_id=vault_id,
+                device_id=device_id,
                 user_id=user_id,
                 event_type=LogEventType.tamper,
                 details=method_used,
+                vault_id=vault_id,
                 timestamp=datetime.utcnow()
             )
 
         # Successful authentication and authorization
         # Create audit log entry for legitimate vault access
         return self.repo.create(
-            vault_id=vault_id,
+            device_id=device_id,
             user_id=user_id,
             event_type=LogEventType.unlock,
             details=method_used,
+            vault_id=vault_id,
             timestamp=datetime.utcnow()
         )

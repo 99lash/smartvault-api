@@ -31,7 +31,7 @@ class Vault(Model, table=True):
     status: VaultStatus = Field(default=VaultStatus.locked, nullable=False, description="Current vault status")
 
     # Relationships
-    logs: Optional[List["Log"]] = Relationship(back_populates="vault")
+    logs: Optional[List["Log"]] = Relationship(back_populates="vault")  # Commented out due to device_id relationship complexity
     vault_memberships: Optional[List["VaultMembership"]] = Relationship(back_populates="vault")
     vault_invitations: Optional[List["VaultInvitation"]] = Relationship(back_populates="vault")
 

@@ -102,7 +102,7 @@ class BruteforceDetectionService:
         count = self.increment_failure_count(vault_id, method)
         if count >= threshold:
             details = "Bruteforce"
-            self.repo.log_tamper_event(vault_id=vault_id, details=details)
+            self.repo.log_tamper_event(device_id=str(vault_id), details=details)
             # Optional: Lock out by resetting or setting a global lock key
             return True
         return False

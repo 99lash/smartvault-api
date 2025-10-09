@@ -62,7 +62,7 @@ class CredentialValidator:
                 
         return nfc, pin
 
-    def validate_credential_for_vault(self, credential: str, is_nfc: bool, vault_id: int, access_controller) -> tuple[Optional[int], Optional[str]]:
+    def validate_credential_for_vault(self, credential: str, is_nfc: bool, device_id: str, access_controller) -> tuple[Optional[int], Optional[str]]:
         """
         Validate a credential against users who have access to a specific vault.
         This is the vault-centric approach.
@@ -70,12 +70,23 @@ class CredentialValidator:
         Args:
             credential (str): The credential value (UID or PIN code).
             is_nfc (bool): True if NFC credential, False if PIN.
-            vault_id (int): The vault ID to check access for.
+            device_id (str): The ESP32 device identifier to check access for.
             access_controller: VaultAccessController instance to check permissions.
 
         Returns:
             tuple[Optional[int], Optional[str]]: (user_id, method_string) if valid for vault, (None, None) otherwise.
         """
+        # Convert device_id to vault_id
+        from app.repositories.VaultRepository import VaultRepository
+        from app.core.database import SessionLocal
+
+        with SessionLocal() as db:
+            vault_repo = VaultRepository(db)
+            vault = vault_repo.get_by_device_id(device_id)
+            if not vault:
+                return None, None
+            vault_id = vault.id
+
         if is_nfc:
             # Validate NFC card by UID
             card = self.nfc_repo.get_by_uid(credential)
@@ -135,12 +146,12 @@ class CredentialValidator:
 
             # Quick user lookup - prioritize NFC, then PIN
             if nfc:
-                user_id, _ = self.validate_credential_for_vault(nfc, True, vault_id, access_controller)
+                user_id, _ = self.validate_credential_for_vault(nfc, True, device_id, access_controller)
                 if user_id:
                     return user_id
 
             if pin:
-                user_id, _ = self.validate_credential_for_vault(pin, False, vault_id, access_controller)
+                user_id, _ = self.validate_credential_for_vault(pin, False, device_id, access_controller)
                 if user_id:
                     return user_id
 

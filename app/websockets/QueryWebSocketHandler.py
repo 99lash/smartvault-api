@@ -1,6 +1,6 @@
 from fastapi import WebSocket, WebSocketDisconnect
 from app.schemas.LogSchemas import WSQueryRequest
-from app.services.Logs.LogQueryService import LogQueryService
+from app.services.logs.LogQueryService import LogQueryService
 from app.core.database import SessionLocal
 
 class QueryWebSocketHandler:

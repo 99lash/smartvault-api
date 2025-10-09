@@ -1,9 +1,9 @@
 from fastapi import WebSocket, WebSocketDisconnect
 from app.schemas.log import LogCreate
-from app.services.Logs.LogService import LogService
-from app.services.Logs.AuthHandlerService import AuthHandlerService
-from app.services.Logs.VaultAccessControllerService import VaultAccessController
-from app.services.Logs.LogQueryService import LogQueryService
+from app.services.logs.LogService import LogService
+from app.services.logs.AuthHandlerService import AuthHandlerService
+from app.services.logs.VaultAccessControllerService import VaultAccessController
+from app.services.logs.LogQueryService import LogQueryService
 from app.services.users.UserService import UserService
 from app.repositories.VaultMembershipRepository import VaultMembershipRepository
 from app.models.Log import LogEventType
@@ -145,25 +145,28 @@ class LogWebSocketHandler:
                             await self.websocket.send_json(response)
                         
                         elif payload.event_type == LogEventType.failed_attempt and payload.details:
+                            # Get vault_id from device_id for logging
+                            vault_id = service._get_vault_id_by_device_id(payload.device_id)
+
                             new_log = service.log_failed_unlock_attempt(
-                                vault_id=payload.vault_id,
+                                device_id=payload.device_id,
                                 user_id=None,  # Anonymous for failed attempts
                                 reason=payload.details
                             )
-                            service.clear_sessions_for_vault(payload.vault_id)
+                            service.clear_sessions_for_vault(payload.device_id)
                             await self.websocket.send_json({"status": "ok", "event_type": "failed_attempt"})
                         
                         elif payload.event_type == LogEventType.tamper and payload.details:
                             new_log = service.log_tamper_detection(
-                                vault_id=payload.vault_id,
+                                device_id=payload.device_id,
                                 sensor_data=payload.details
                             )
-                            service.clear_sessions_for_vault(payload.vault_id)
+                            service.clear_sessions_for_vault(payload.device_id)
                             await self.websocket.send_json({"status": "ok", "event_type": "tamper"})
                         
                         else:
                             new_log = service.create_log(
-                                vault_id=payload.vault_id,
+                                device_id=payload.device_id,
                                 event_type=payload.event_type,
                                 user_id=None,  # Default to anonymous
                                 details=payload.details,

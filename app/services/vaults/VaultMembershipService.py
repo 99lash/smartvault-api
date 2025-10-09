@@ -39,10 +39,12 @@ class VaultMembershipService:
         )
 
         # =====================================================================
-        # STEP 3: PERSIST MEMBERSHIP (NON-COMMITTAL)
+        # STEP 3: PERSIST MEMBERSHIP (COMMIT TO DATABASE)
         # =====================================================================
         self.db.add(membership)
-        self.db.flush()  # Write to transaction but don't commit yet
+        self.db.flush()  # Write to transaction
+        self.db.commit()  # Commit the transaction
+        self.db.refresh(membership)  # Refresh with DB-generated fields
         return membership
 
     # -------------------------------------------------------------------------

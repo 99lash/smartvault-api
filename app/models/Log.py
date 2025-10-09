@@ -25,12 +25,13 @@ class LogEventType(str, enum.Enum):
 class Log(Model, table=True):
     __tablename__ = "logs"
 
-    device_id: str = Field(foreign_key="vaults.device_id", nullable=False)
+    device_id: str = Field(nullable=False)
     user_id: Optional[int] = Field(foreign_key="users.id", default=None)  # nullable if unknown intruder
+    vault_id: Optional[int] = Field(foreign_key="vaults.id", default=None)
     event_type: LogEventType = Field(nullable=False)
     # Use created_at from base Model instead of separate timestamp field
     details: Optional[str] = Field(default=None, nullable=True)  # JSON or text info
 
-    # Optional relationships for ORM
+    # Optional relationships for ORM (no foreign keys for device_id)
     vault: Optional["Vault"] = Relationship(back_populates="logs")
     user: Optional["User"] = Relationship(back_populates="logs")

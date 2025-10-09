@@ -10,9 +10,9 @@ class LogRepository(Repository):
     def __init__(self, db: Session):
         super().__init__(db, Log)
 
-    def get_by_vault(self, vault_id: int) -> List[Log]:
-        """Get all logs for a specific vault"""
-        return self.db.query(self.model).filter(self.model.vault_id == vault_id).all()
+    def get_by_device(self, device_id: str) -> List[Log]:
+        """Get all logs for a specific device"""
+        return self.db.query(self.model).filter(self.model.device_id == device_id).all()
 
     def get_by_user(self, user_id: int) -> List[Log]:
         """Get all logs for a specific user"""
@@ -22,11 +22,11 @@ class LogRepository(Repository):
         """Get all logs of a specific event type"""
         return self.db.query(self.model).filter(self.model.event_type == event_type).all()
 
-    def get_by_vault_and_event_type(self, vault_id: int, event_type: LogEventType) -> List[Log]:
-        """Get logs for a specific vault and event type"""
+    def get_by_device_and_event_type(self, device_id: str, event_type: LogEventType) -> List[Log]:
+        """Get logs for a specific device and event type"""
         return (
             self.db.query(self.model)
-            .filter(self.model.vault_id == vault_id, self.model.event_type == event_type)
+            .filter(self.model.device_id == device_id, self.model.event_type == event_type)
             .all()
         )
 
@@ -41,26 +41,26 @@ class LogRepository(Repository):
         )
 
     def get_logs_by_date_range(
-        self, start_date: datetime, end_date: datetime, vault_id: Optional[int] = None
+        self, start_date: datetime, end_date: datetime, device_id: Optional[str] = None
     ) -> List[Log]:
-        """Get logs within a specific date range, optionally filtered by vault"""
+        """Get logs within a specific date range, optionally filtered by device"""
         query = self.db.query(self.model).filter(
             self.model.created_at >= start_date,
             self.model.created_at <= end_date
         )
 
-        if vault_id:
-            query = query.filter(self.model.vault_id == vault_id)
+        if device_id:
+            query = query.filter(self.model.device_id == device_id)
 
         return query.order_by(self.model.created_at.desc()).all()
 
-    def get_failed_attempts_by_vault(self, vault_id: int, hours: int = 24) -> List[Log]:
-        """Get recent failed attempts for a specific vault"""
+    def get_failed_attempts_by_device(self, device_id: str, hours: int = 24) -> List[Log]:
+        """Get recent failed attempts for a specific device"""
         cutoff_time = datetime.utcnow() - timedelta(hours=hours)
         return (
             self.db.query(self.model)
             .filter(
-                self.model.vault_id == vault_id,
+                self.model.device_id == device_id,
                 self.model.event_type == LogEventType.failed_attempt,
                 self.model.created_at >= cutoff_time
             )
@@ -68,7 +68,7 @@ class LogRepository(Repository):
             .all()
         )
 
-    def get_security_events(self, vault_id: Optional[int] = None, hours: int = 24) -> List[Log]:
+    def get_security_events(self, device_id: Optional[str] = None, hours: int = 24) -> List[Log]:
         """Get security-related events (failed attempts, tamper, alarm)"""
         security_events = [
             LogEventType.failed_attempt,
@@ -76,83 +76,86 @@ class LogRepository(Repository):
             LogEventType.alarm
         ]
         cutoff_time = datetime.utcnow() - timedelta(hours=hours)
-        
+
         query = self.db.query(self.model).filter(
             self.model.event_type.in_(security_events),
             self.model.created_at >= cutoff_time
         )
 
-        if vault_id:
-            query = query.filter(self.model.vault_id == vault_id)
+        if device_id:
+            query = query.filter(self.model.device_id == device_id)
 
         return query.order_by(self.model.created_at.desc()).all()
 
-    def count_events_by_type(self, vault_id: Optional[int] = None, hours: int = 24) -> dict:
+    def count_events_by_type(self, device_id: Optional[str] = None, hours: int = 24) -> dict:
         """Get count of events by type for analytics"""
         cutoff_time = datetime.utcnow() - timedelta(hours=hours)
-        
+
         query = self.db.query(self.model.event_type, func.count(self.model.id)).filter(
             self.model.created_at >= cutoff_time
         )
 
-        if vault_id:
-            query = query.filter(self.model.vault_id == vault_id)
+        if device_id:
+            query = query.filter(self.model.device_id == device_id)
 
         results = query.group_by(self.model.event_type).all()
         return {event_type: count for event_type, count in results}
 
-    def log_vault_unlock(self, vault_id: int, user_id: int, details: Optional[str] = None) -> Log:
-        """Convenience method to log a vault unlock"""
+    def log_device_unlock(self, device_id: str, user_id: int, details: Optional[str] = None) -> Log:
+        """Convenience method to log a device unlock"""
         return self.create(
-            vault_id=vault_id,
+            device_id=device_id,
             user_id=user_id,
             event_type=LogEventType.unlock,
             details=details
         )
 
-    def log_failed_attempt(self, vault_id: int, user_id: Optional[int] = None, details: Optional[str] = None) -> Log:
+    def log_failed_attempt(self, device_id: str, user_id: Optional[int] = None, details: Optional[str] = None, vault_id: Optional[int] = None) -> Log:
         """Convenience method to log a failed unlock attempt"""
         return self.create(
-            vault_id=vault_id,
+            device_id=device_id,
             user_id=user_id,
             event_type=LogEventType.failed_attempt,
-            details=details
+            details=details,
+            vault_id=vault_id
         )
 
-    def log_tamper_event(self, vault_id: int, details: Optional[str] = None) -> Log:
+    def log_tamper_event(self, device_id: str, details: Optional[str] = None, vault_id: Optional[int] = None) -> Log:
         """Convenience method to log a tamper event"""
         return self.create(
-            vault_id=vault_id,
+            device_id=device_id,
             user_id=None,
             event_type=LogEventType.tamper,
-            details=details
+            details=details,
+            vault_id=vault_id
         )
 
-    def log_alarm_event(self, vault_id: int, details: Optional[str] = None) -> Log:
+    def log_alarm_event(self, device_id: str, details: Optional[str] = None, vault_id: Optional[int] = None) -> Log:
         """Convenience method to log an alarm event"""
         return self.create(
-            vault_id=vault_id,
+            device_id=device_id,
             user_id=None,
             event_type=LogEventType.alarm,
-            details=details
+            details=details,
+            vault_id=vault_id
         )
 
     def get_logs_with_pagination(
         self,
         page: int = 1,
         per_page: int = 20,
-        vault_id: Optional[int] = None,
+        device_id: Optional[str] = None,
         event_type: Optional[LogEventType] = None
     ) -> List[Log]:
         """Get paginated logs with optional filters"""
         query = self.db.query(self.model)
-        
-        if vault_id:
-            query = query.filter(self.model.vault_id == vault_id)
-        
+
+        if device_id:
+            query = query.filter(self.model.device_id == device_id)
+
         if event_type:
             query = query.filter(self.model.event_type == event_type)
-        
+
         offset = (page - 1) * per_page
         return (
             query
@@ -162,27 +165,27 @@ class LogRepository(Repository):
             .all()
         )
 
-    def get_filtered_logs_by_vault(self, vault_id: int, prefixes: List[str]) -> List[Log]:
+    def get_filtered_logs_by_device(self, device_id: str, prefixes: List[str]) -> List[Log]:
         """
-        Get logs for a vault filtered by details prefixes (starts with any prefix).
-        
+        Get logs for a device filtered by details prefixes (starts with any prefix).
+
         Args:
-            vault_id (int): Vault ID to filter by.
+            device_id (str): Device ID to filter by.
             prefixes (List[str]): List of prefixes to match in details (e.g., ['Locked', 'Tamper']).
-            
+
         Returns:
             List[Log]: Matching logs ordered by timestamp descending.
         """
         if not prefixes:
             return []
-        
+
         from sqlalchemy import or_
         like_filters = [self.model.details.like(f"{prefix}%") for prefix in prefixes]
-        
+
         return (
             self.db.query(self.model)
             .filter(
-                self.model.vault_id == vault_id,
+                self.model.device_id == device_id,
                 or_(*like_filters)
             )
             .order_by(self.model.created_at.desc())

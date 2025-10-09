@@ -62,7 +62,7 @@ class SessionManager:
         Returns:
             Optional[int]: User ID if found and authorized for vault, None otherwise.
         """
-        from app.services.Logs.VaultAccessControllerService import VaultAccessController
+        from app.services.logs.VaultAccessControllerService import VaultAccessController
         from app.repositories.VaultMembershipRepository import VaultMembershipRepository
         from app.core.database import SessionLocal
 
