@@ -191,9 +191,15 @@ def get_filtered_logs(
             detail="No access to this vault"
         )
     
+    # Get vault to find its device_id
+    vault_service = VaultService(db)
+    vault = vault_service.get_vault_by_id(vault_id)
+    if not vault:
+        raise HTTPException(status_code=404, detail="Vault not found")
+
     prefix_list = [p.strip() for p in prefixes.split(",") if p.strip()]
     service = LogQueryService(db)
-    logs = service.get_filtered_logs_by_device(str(vault_id), prefix_list)
+    logs = service.get_filtered_logs_by_device(vault.device_id, prefix_list)
     if not logs:
         raise HTTPException(status_code=404, detail="No matching logs found")
     # Serialize with LogResponse for consistency

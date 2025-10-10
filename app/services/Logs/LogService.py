@@ -35,6 +35,9 @@ class LogService:
         Args:
             db (Session): SQLAlchemy database session.
         """
+        # Store database session for later use
+        self.db = db
+
         # Initialize repository with a database session
         self.repo = LogRepository(db)
         self.vault_membership_repo = VaultMembershipRepository(db)
@@ -62,7 +65,7 @@ class LogService:
         """
         if self.vault_repo is None:
             from app.repositories.VaultRepository import VaultRepository
-            self.vault_repo = VaultRepository(self.repo.db)
+            self.vault_repo = VaultRepository(self.db)
 
         vault = self.vault_repo.get_by_device_id(device_id)
         return vault.id if vault else None
