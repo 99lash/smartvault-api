@@ -47,7 +47,7 @@ class LogQueryService:
                 'user_id': log.user_id,
                 'event_type': log.event_type.value if hasattr(log.event_type, 'value') else log.event_type,
                 'details': log.details,
-                'created_at': log.created_at.isoformat() if log.created_at else None
+                'timestamp': log.created_at.isoformat() if log.created_at else None
             }
             serialized_logs.append(log_dict)
 

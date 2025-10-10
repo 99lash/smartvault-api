@@ -59,6 +59,7 @@ class AuthenticationFlow:
                     user_id=None,
                     event_type=LogEventType.failed_attempt,
                     details=f"Invalid dual credentials for vault: NFC={nfc_user is not None}, PIN={pin_user is not None}",
+                    vault_id=vault_id,
                     timestamp=datetime.utcnow()
                 )
                 self.session_manager.clear_sessions_for_vault(device_id)
@@ -72,6 +73,7 @@ class AuthenticationFlow:
                     user_id=None,
                     event_type=LogEventType.tamper,
                     details=f"Mismatched dual credentials: NFC user {nfc_user} != PIN user {pin_user}",
+                    vault_id=vault_id,
                     timestamp=datetime.utcnow()
                 )
                 self.session_manager.clear_sessions_for_vault(device_id)
@@ -99,6 +101,7 @@ class AuthenticationFlow:
                     user_id=user_id,
                     event_type=LogEventType.failed_attempt,
                     details=f"Same factor repeated: {current_method}",
+                    vault_id=vault_id,
                     timestamp=datetime.utcnow()
                 )
                 self.session_manager.clear_sessions_for_vault(device_id)
@@ -110,6 +113,7 @@ class AuthenticationFlow:
                 user_id=user_id,
                 event_type=LogEventType.unlock,
                 details=f"DUAL: {session['first_method']}:{session['first_credential']} + {current_method}:{second_credential}",
+                vault_id=vault_id,
                 timestamp=datetime.utcnow()
             )
             del self.session_manager.auth_sessions[session_key]
@@ -125,6 +129,7 @@ class AuthenticationFlow:
                 user_id=user_id,
                 event_type=LogEventType.tamper,
                 details=f"No vault access: {method_used}",
+                vault_id=vault_id,
                 timestamp=datetime.utcnow()
             )
             self.session_manager.clear_sessions_for_vault(device_id)
@@ -143,6 +148,7 @@ class AuthenticationFlow:
                     user_id=user_id,
                     event_type=LogEventType.unlock,
                     details=method_used,
+                    vault_id=vault_id,
                     timestamp=datetime.utcnow()
                 )
                 return log_entry, 'unlock'
@@ -163,6 +169,7 @@ class AuthenticationFlow:
                     user_id=user_id,
                     event_type=LogEventType.unlock,  # Log as unlock attempt (pending)
                     details=f"First factor: {method_used}",
+                    vault_id=vault_id,
                     timestamp=datetime.utcnow()
                 )
                 return log_entry, 'pending'
@@ -173,6 +180,7 @@ class AuthenticationFlow:
                 user_id=user_id,
                 event_type=LogEventType.unlock,
                 details=method_used,
+                vault_id=vault_id,
                 timestamp=datetime.utcnow()
             )
             return log_entry, 'unlock'
@@ -224,6 +232,7 @@ class AuthenticationFlow:
                 user_id=user_id,
                 event_type=LogEventType.failed_attempt,
                 details=f"Same factor repeated: {second_method}",
+                vault_id=vault_id,
                 timestamp=datetime.utcnow()
             )
             return log_entry, 'invalid_credentials'
@@ -235,6 +244,7 @@ class AuthenticationFlow:
             user_id=user_id,
             event_type=LogEventType.unlock,
             details=f"DUAL: {session['first_method']}:{session['first_credential']} + {second_method}:{details}",
+            vault_id=vault_id,
             timestamp=datetime.utcnow()
         )
         return log_entry, 'unlock'
