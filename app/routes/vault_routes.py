@@ -100,7 +100,7 @@ def create_vault(
 # List all vaults
 # -----------------------------
 @router.get("/", response_model=list[VaultRead])
-def list_vaults(db: Session = Depends(get_db)):
+def list_vaults(db: Session = Depends(get_db), current_user = Depends(get_current_user)):
     """
     Returns all vaults.
     """
@@ -111,7 +111,7 @@ def list_vaults(db: Session = Depends(get_db)):
 # Get a vault by ID
 # -----------------------------
 @router.get("/{vault_id}", response_model=VaultRead)
-def get_vault(vault_id: int, db: Session = Depends(get_db)):
+def get_vault(vault_id: int, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
     """
     Fetch a single vault by ID.
     - Raises 404 if vault not found.
@@ -126,7 +126,7 @@ def get_vault(vault_id: int, db: Session = Depends(get_db)):
 # Soft delete a vault
 # -----------------------------
 @router.delete("/{vault_id}", response_model=Response)
-def delete_vault(vault_id: int, db: Session = Depends(get_db)):
+def delete_vault(vault_id: int, db: Session = Depends(get_db), current_user = Depends(get_current_admin)):
     """
     Soft deletes a vault by ID.
     - Raises 404 if vault not found.
@@ -143,8 +143,9 @@ def delete_vault(vault_id: int, db: Session = Depends(get_db)):
 @router.delete("/{vault_id}/hard", response_model=Response)
 def hard_delete_vault(
     vault_id: int,
-    authorization: Optional[str] = Header(None),
-    db: Session = Depends(get_db)
+    # authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_admin)
 ):
     """
     Permanently deletes a vault and all associated data.
@@ -153,15 +154,15 @@ def hard_delete_vault(
     - Raises 404 if vault not found.
     """
     # Manual token validation
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authentication required"
-        )
+    # if not authorization or not authorization.startswith("Bearer "):
+    #     raise HTTPException(
+    #         status_code=status.HTTP_401_UNAUTHORIZED,
+    #         detail="Authentication required"
+    #     )
 
-    token = authorization.split(" ")[1]
-    user_service = UserService(db)
-    current_user = user_service.validate_token(token)
+    # token = authorization.split(" ")[1]
+    # user_service = UserService(db)
+    # current_user = user_service.validate_token(token)
 
     # Check if user has admin access to the vault
     membership_service = VaultMembershipService(db)
@@ -186,7 +187,7 @@ def hard_delete_vault(
 # Update a vault's status
 # -----------------------------
 @router.patch("/{vault_id}/status", response_model=Response)
-def update_vault_status(vault_id: int, payload: UpdateVaultStatus, db: Session = Depends(get_db)):
+def update_vault_status(vault_id: int, payload: UpdateVaultStatus, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
     """
     Update the status of a vault.
     - Example: locked, unlocked, tampered.
@@ -204,8 +205,9 @@ def update_vault_status(vault_id: int, payload: UpdateVaultStatus, db: Session =
 @router.get("/{vault_id}/admin-check", response_model=Response[dict])
 def check_vault_admin(
     vault_id: int,
-    authorization: Optional[str] = Header(None),
-    db: Session = Depends(get_db)
+    # authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
 ):
     """
     Check if current user has admin access to vault.
@@ -215,16 +217,16 @@ def check_vault_admin(
     - Returns admin status for the specified vault
     """
     try:
-        # Manual token validation
-        if not authorization or not authorization.startswith("Bearer "):
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Authentication required"
-            )
+    #     # Manual token validation
+    #     if not authorization or not authorization.startswith("Bearer "):
+    #         raise HTTPException(
+    #             status_code=status.HTTP_401_UNAUTHORIZED,
+    #             detail="Authentication required"
+    #         )
 
-        token = authorization.split(" ")[1]
-        user_service = UserService(db)
-        current_user = user_service.validate_token(token)
+    #     token = authorization.split(" ")[1]
+    #     user_service = UserService(db)
+    #     current_user = user_service.validate_token(token)
 
         # Check if user has admin access to the vault
         membership_service = VaultMembershipService(db)
