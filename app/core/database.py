@@ -1,15 +1,7 @@
-# SQLModel is built on top of SQLAlchemy + Pydantic.
-# - create_engine → opens a connection to the database
-# - SQLModel → base class for defining your database models (tables)
 from sqlmodel import create_engine, SQLModel
-
-# sessionmaker is a factory that creates new Session objects.
 from sqlalchemy.orm import sessionmaker
-
-# python-dotenv loads environment variables from a .env file
+from sqlalchemy.pool import QueuePool
 from dotenv import load_dotenv
-
-# os lets us read environment variables
 import os
 
 # Load variables from .env
@@ -24,7 +16,7 @@ else:
     print(f"DATABASE_URL configured: {DATABASE_URL.split('@')[0] if '@' in DATABASE_URL else DATABASE_URL[:20]}...")
 
 # Pick DB based on environment
-ENV = os.getenv("ENV", "dev")  # e.g., dev, test, prod
+ENV = os.getenv("ENV", "dev")
 if ENV == "test":
     DATABASE_URL = os.getenv("TEST_DATABASE_URL")
 else:
@@ -33,15 +25,23 @@ else:
 if not DATABASE_URL:
     raise ValueError("DATABASE_URL is not set")
 
-# Create the database engine
+# ✅ FIXED: Create the database engine with proper pool configuration
 DEBUG = os.getenv("DEBUG", "false").lower() == "true"
-engine = create_engine(DATABASE_URL, echo=DEBUG)
+
+engine = create_engine(
+    DATABASE_URL,
+    echo=DEBUG,
+    poolclass=QueuePool,
+    pool_size=10,              # ✅ Increased from default 5 to 10
+    max_overflow=20,           # ✅ Increased from default 10 to 20
+    pool_timeout=30,           # ✅ Wait up to 30 seconds for a connection
+    pool_recycle=3600,         # ✅ Recycle connections after 1 hour
+    pool_pre_ping=True,        # ✅ Verify connections are alive before using
+)
+
+print(f"Database pool configured: size={10}, max_overflow={20}, total_max={30}")
 
 # Session factory for DB access
-# Every time SessionLocal() is called, you get a new database session (connection to your DB).
-# Created at the start of the request (SessionLocal()).
-# Used to run queries, inserts, updates, etc. during that request.
-# Closed in the finally: block after the request is done — whether it succeeded or failed.
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 # Initialize the database (only for dev / first run)
@@ -56,18 +56,41 @@ def init_database():
 
 # Dependency for FastAPI routes
 def get_db():
-    db = SessionLocal() # Creates a new database session (a temporary connection).
-    try:
-        yield db # Whatever route function depends on get_db, FastAPI will “inject” the db session into it.
-    finally:
-        # After the route handler is done (whether it succeeded or raised an error), FastAPI ensures this cleanup code runs.
-        # It closes the session and releases the connection back to the pool.
-        db.close()
-
-# Scoped session for WebSocket (mirrors get_db for manual use)
-def get_db_ws():
+    """
+    Database session dependency for FastAPI routes.
+    Automatically closes the session after the request.
+    """
     db = SessionLocal()
     try:
         yield db
     finally:
         db.close()
+
+# ✅ REMOVED get_db_ws - use get_db_manual instead
+def get_db_manual():
+    """
+    Manual database session creation for WebSocket handlers.
+    MUST be closed manually with db.close() in a try/finally block.
+    
+    Usage:
+        db = get_db_manual()
+        try:
+            # Use db here
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
+        finally:
+            db.close()  # ✅ ALWAYS close
+    """
+    return SessionLocal()
+
+# ✅ Optional: Monitor pool health
+def get_pool_status():
+    """Get current connection pool status for debugging"""
+    return {
+        "pool_size": engine.pool.size(),
+        "checked_out": engine.pool.checkedout(),
+        "overflow": engine.pool.overflow(),
+        "total_connections": engine.pool.size() + engine.pool.overflow(),
+    }

@@ -25,7 +25,7 @@ class NfcCardService:
         self.repo = NfcCardRepository(db)
 
     def create_card(self, uid: str, user_id: Optional[int] = None) -> NfcCard:
-        """Create a new NFC card."""
+        """Create a new NFC card.""" 
         return self.repo.create(uid=uid, user_id=user_id)
 
     def get_card_by_uid(self, uid: str) -> Optional[NfcCard]:

@@ -12,13 +12,11 @@ from app.websockets.QueryWebSocketHandler import QueryWebSocketHandler
 from app.models.Log import LogEventType
 from app.models.User import User, UserRole
 from app.schemas.Response import Response
-from app.core.database import SessionLocal
 from pydantic import BaseModel
 from app.services.vaults.VaultService import VaultService
 from app.services.users.UserService import UserService
 from app.services.logs.VaultAccessControllerService import VaultAccessController
 from app.repositories.VaultMembershipRepository import VaultMembershipRepository
-# from app.models.Log import Log;
 
 class ValidateAccessRequest(BaseModel):
     vault_id: int
@@ -41,23 +39,8 @@ class LogBulkDeleteResponse(BaseModel):
     older_than_days: Optional[int] = None
     message: str
 
-# -----------------------------
-# router for Log endpoints
-# -----------------------------
-# Handles HTTP/WebSocket requests for log management and real-time authentication events.
-# - HTTP: CRUD operations for logs (list, delete)
-# - WebSocket: Real-time processing of unlock attempts, tamper detection, etc.
-# Delegates business logic to services and handlers for separation of concerns (SOC).
 router = APIRouter(prefix="/logs", tags=["logs"])
 
-# -----------------------------
-# HTTP Endpoints for Log Management
-# -----------------------------
-# Basic CRUD operations for retrieving and managing logs.
-
-# -----------------------------
-# Retrieve all log entries
-# -----------------------------
 @router.get("/", response_model=list[LogRead])
 def list_logs(db: Session = Depends(get_db)):
     """
@@ -74,9 +57,6 @@ def list_logs(db: Session = Depends(get_db)):
     service = LogService(db)
     return service.get_all_logs()
 
-# -----------------------------
-# Delete a specific log entry
-# -----------------------------
 @router.delete("/{log_id}", response_model=Response)
 def delete_log(log_id: int, db: Session = Depends(get_db)):
     """
@@ -100,9 +80,6 @@ def delete_log(log_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Log not found")
     return Response(success=True, detail=f"Log {log_id} deleted successfully")
 
-# -----------------------------
-# Bulk delete logs
-# -----------------------------
 @router.delete("/bulk", response_model=Response[LogBulkDeleteResponse])
 def bulk_delete_logs(
     request: LogBulkDeleteRequest,
@@ -123,8 +100,6 @@ def bulk_delete_logs(
 
     **Security:** Requires admin role for dangerous operations like delete_all
     """
-
-    # Check if user is admin for dangerous operations
     if request.delete_all or (request.older_than_days and request.older_than_days < 7):
         if current_user.role != UserRole.admin:
             raise HTTPException(
@@ -132,7 +107,6 @@ def bulk_delete_logs(
                 detail="Admin role required for this operation"
             )
 
-    # Validate that at least one filter is provided (unless admin deleting all)
     if not request.delete_all and not any([request.vault_id, request.user_id, request.event_type, request.older_than_days]):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -169,20 +143,23 @@ def bulk_delete_logs(
 @router.get("/vault/{vault_id}/filtered")
 def get_filtered_logs(
     vault_id: int,
-    prefixes: str = "DUAL,Tamper,Failure,Manual",
+    prefixes: str = "DUAL,Tamper,Failure,Manual,NFC",
+    limit: Optional[int] = None,
+    offset: Optional[int] = None,
     current_user = Depends(UserService.get_current_user),
     db: Session = Depends(get_db)
 ):
     """
     Get logs for a vault filtered by specific details prefixes.
     
-    Query Param:
-        prefixes: Comma-separated list of prefixes (default: DUAL,Tamper,Failure,Manual).
+    Query Params:
+        prefixes: Comma-separated list of prefixes (default: DUAL,Tamper,Failure,Manual,NFC).
+        limit: Maximum number of logs to return (default: None = all matching logs).
+        offset: Number of logs to skip (default: 0).
     
     Returns:
         List[dict]: Filtered and serialized logs, ordered by timestamp descending.
     """
-    # Check vault access
     vault_membership_repo = VaultMembershipRepository(db)
     controller = VaultAccessController(vault_membership_repo)
     if not controller.check_access(current_user.id, vault_id):
@@ -191,60 +168,24 @@ def get_filtered_logs(
             detail="No access to this vault"
         )
     
-    # Get vault to find its device_id
     vault_service = VaultService(db)
     vault = vault_service.get_vault_by_id(vault_id)
     if not vault:
         raise HTTPException(status_code=404, detail="Vault not found")
 
     prefix_list = [p.strip() for p in prefixes.split(",") if p.strip()]
+
     service = LogQueryService(db)
-    logs = service.get_filtered_logs_by_device(vault.device_id, prefix_list)
+    logs = service.get_filtered_logs_by_device(vault.device_id, prefix_list, limit, offset)
+
     if not logs:
         raise HTTPException(status_code=404, detail="No matching logs found")
-    # Serialize with LogResponse for consistency
+    
     serialized_logs = [LogResponse(**log).model_dump() for log in logs]
     return serialized_logs
 
-
-# -----------------------------
-# TESTING ENDPOINT POST /test 
-# -----------------------------
-#
-# # @router.post("/test", status_code=status.HTTP_201_CREATED)
-# def create_log_test(payload: LogCreate, db: Session = Depends(get_db)):
-#     try:
-#         log = Log(
-#             device_id=payload.device_id,
-#             user_id=payload.user_id,
-#             event_type=payload.event_type,
-#             details=payload.details
-#         )
-#         db.add(log)
-#         db.commit()
-#         db.refresh(log)
-#         return {
-#             "success": True,
-#             "data": log,
-#             "message": "Log inserted successfully."
-#         }
-
-#     except Exception as e:
-#         raise HTTPException(
-#             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-#             detail=f"Failed to insert log: {e}"
-#         )
-
-# -----------------------------
-# WebSocket Endpoint for Real-Time Event Processing
-# -----------------------------
-# This endpoint handles streaming events from clients (e.g., Arduino devices) for
-# real-time authentication, logging, and status updates. Each message is processed
-# transactionally with a new DB session to ensure isolation.
-
 @router.websocket("/ws")
 async def websocket_logs(websocket: WebSocket):
-    print("Incoming WS connection to /logs/ws")
     """
     WebSocket endpoint for real-time log and authentication event processing.
 
@@ -255,21 +196,19 @@ async def websocket_logs(websocket: WebSocket):
     Args:
         websocket (WebSocket): Connected client (e.g., device sending credentials).
     """
-    print("WS: Route function websocket_logs entered - before handler creation")
-    import logging
-    logging.info("WS: Route /logs/ws entered successfully")
-
+    handler = None
+    
     try:
         handler = LogWebSocketHandler(websocket)
-        print("WS: Handler created successfully")
-        logging.info("WS: LogWebSocketHandler instantiated")
         await handler.handle_connection()
-    except Exception as route_err:
-        print(f"WS: Exception in route function: {str(route_err)}")
-        import traceback
-        traceback.print_exc()
-        logging.error(f"WS route exception: {route_err} - traceback: {traceback.format_exc()}")
-        raise  # Re-raise to trigger 403 or close
+    except WebSocketDisconnect:
+        pass
+    except Exception as e:
+        import logging
+        logging.error(f"WebSocket error: {str(e)}")
+    finally:
+        if handler:
+            await handler.cleanup()
 
 @router.websocket("/ws/query") 
 async def websocket_query_logs(websocket: WebSocket):
@@ -283,5 +222,16 @@ async def websocket_query_logs(websocket: WebSocket):
     Args:
         websocket (WebSocket): Connected client requesting logs.
     """
-    handler = QueryWebSocketHandler(websocket)
-    await handler.handle_connection()
+    handler = None
+    
+    try:
+        handler = QueryWebSocketHandler(websocket)
+        await handler.handle_connection()
+    except WebSocketDisconnect:
+        pass
+    except Exception as e:
+        import logging
+        logging.error(f"WebSocket query error: {str(e)}")
+    finally:
+        if handler:
+            await handler.cleanup()

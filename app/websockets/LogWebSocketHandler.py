@@ -7,12 +7,43 @@ from app.services.logs.LogQueryService import LogQueryService
 from app.services.users.UserService import UserService
 from app.repositories.VaultMembershipRepository import VaultMembershipRepository
 from app.models.Log import LogEventType
-from app.core.database import SessionLocal
+from app.core.database import get_db_manual
 import logging
 
 class LogWebSocketHandler:
     def __init__(self, websocket: WebSocket):
         self.websocket = websocket
+        self.db_sessions = []  # ✅ Track all DB sessions for cleanup
+    
+    def _create_db_session(self):
+        """Create and track a new DB session"""
+        db = get_db_manual()
+        self.db_sessions.append(db)
+        return db
+    
+    def _close_db_session(self, db):
+        """Close and remove a specific DB session"""
+        try:
+            db.close()
+            if db in self.db_sessions:
+                self.db_sessions.remove(db)
+        except Exception as e:
+            logging.error(f"Error closing DB session: {e}")
+    
+    async def cleanup(self):
+        """
+        ✅ CRITICAL: Close all open database sessions
+        Called by the route handler in finally block
+        """
+        logging.info(f"Cleaning up WebSocket handler - {len(self.db_sessions)} sessions to close")
+        for db in self.db_sessions[:]:  # Use slice to avoid modification during iteration
+            try:
+                db.close()
+                logging.info("DB session closed")
+            except Exception as e:
+                logging.error(f"Error closing DB session during cleanup: {e}")
+        self.db_sessions.clear()
+        logging.info("WebSocket handler cleanup complete")
 
     async def handle_connection(self):
         """
@@ -20,11 +51,8 @@ class LogWebSocketHandler:
         Accepts, loops for messages, dispatches events.
         Supports query mode if prefixes param present (for log retrieval with auth).
         """
-        import logging
-        print("WS: Connection attempt")
         logging.info(f"WS connection attempt from {self.websocket.client.host}")
         await self.websocket.accept()
-        print("WS: Connection accepted")
         logging.info("WS connection accepted")
         
         # Check for query mode (log retrieval with auth)
@@ -33,63 +61,58 @@ class LogWebSocketHandler:
         vault_id_str = str(query_params.get('vault_id'))
         prefixes_str = query_params.get('prefixes', '')
         
-        token_preview = token[:20] + "..." if token else "None"
-        prefixes_preview = prefixes_str[:50] + "..." if prefixes_str else "None"
-        print(f"WS: Extracted query params - token present: {bool(token)}, full token masked: {token_preview}, vault_id: {vault_id_str}, prefixes: {prefixes_preview}")
-        logging.info(f"Query params details: token length={len(token) if token else 0}, vault_id={vault_id_str}, prefixes={prefixes_str}")
+        logging.info(f"Query params: token present={bool(token)}, vault_id={vault_id_str}, prefixes={prefixes_str[:50]}")
         
         if prefixes_str and token and vault_id_str:
-            print("WS: Entering query mode")
             logging.info("Detected query mode")
+            db = None  # ✅ Initialize to None for proper cleanup
             try:
                 vault_id = vault_id_str
                 prefixes = [p.strip() for p in prefixes_str.split(',') if p.strip()]
-                print(f"WS: Parsed vault_id={vault_id}, prefixes={prefixes}")
                 
-                db = next(get_db_ws())
-                print(f"WS: Starting connection for vault_id={vault_id}")
-                print(f"WS: Token received: {token[:20]}...")
-                print(f"WS: Opening session...")
-                print(f"WS: About to validate token...")
+                # ✅ Create tracked DB session
+                db = self._create_db_session()
+                
                 # Validate token and get user
                 try:
-                    logging.info(f"Attempting to validate WS token for vault {vault_id}: {token[:20]}...")
+                    logging.info(f"Validating token for vault {vault_id}")
                     user = UserService.validate_token(token, db)
-                    print(f"WS: Token validation succeeded for user {user.username}, id {user.id}")
-                    logging.info(f"Token validated for user {user.username}, user_id: {user.id}")
+                    logging.info(f"Token validated for user {user.username}, id={user.id}")
                 except ValueError as auth_err:
-                    print(f"WS: Token validation FAILED with ValueError: {str(auth_err)} - full details: {auth_err}")
-                    import traceback
-                    traceback.print_exc()
-                    logging.warning(f"WS auth failed for vault {vault_id}: {auth_err} - traceback: {traceback.format_exc()}")
-                    await self.websocket.send_json({"status": "error", "message": "Invalid token", "details": str(auth_err)})
-                    await self.websocket.close(code=status.WS_403_FORBIDDEN)
-                    db.close()
-                    return
+                    logging.warning(f"WS auth failed for vault {vault_id}: {auth_err}")
+                    await self.websocket.send_json({
+                        "status": "error", 
+                        "message": "Invalid token", 
+                        "details": str(auth_err)
+                    })
+                    await self.websocket.close(code=1008)  # Policy violation
+                    return  # cleanup() will be called by route handler
                 except Exception as general_err:
-                    print(f"WS: Unexpected error in token validation: {str(general_err)}")
-                    import traceback
-                    traceback.print_exc()
-                    logging.error(f"WS token validation unexpected error: {general_err} - traceback: {traceback.format_exc()}")
-                    await self.websocket.send_json({"status": "error", "message": "Token validation error", "details": str(general_err)})
-                    await self.websocket.close(code=status.WS_403_FORBIDDEN)
-                    db.close()
+                    logging.error(f"WS token validation error: {general_err}")
+                    await self.websocket.send_json({
+                        "status": "error", 
+                        "message": "Token validation error", 
+                        "details": str(general_err)
+                    })
+                    await self.websocket.close(code=1008)
                     return
                 
                 # Check vault access
-                print(f"WS: Checking vault access for user {user.id} (username: {user.username}), vault {vault_id}")
+                logging.info(f"Checking vault access for user {user.id}, vault {vault_id}")
                 vault_membership_repo = VaultMembershipRepository(db)
                 controller = VaultAccessController(vault_membership_repo)
-                access_result = controller.check_access(user.id, vault_id)
-                print(f"WS: Vault access check result: {access_result} for user {user.id}, vault {vault_id}")
-                if not access_result:
-                    print(f"WS: Access DENIED for user {user.id} to vault {vault_id} - no UserVault relation found?")
-                    logging.warning(f"User {user.username} denied access to vault {vault_id} - check UserVault table")
-                    await self.websocket.send_json({"status": "error", "message": "No access to vault", "vault_id": vault_id, "user_id": user.id})
-                    await self.websocket.close(code=status.WS_403_FORBIDDEN)
-                    db.close()
+                
+                if not controller.check_access(user.id, vault_id):
+                    logging.warning(f"User {user.username} denied access to vault {vault_id}")
+                    await self.websocket.send_json({
+                        "status": "error", 
+                        "message": "No access to vault", 
+                        "vault_id": vault_id, 
+                        "user_id": user.id
+                    })
+                    await self.websocket.close(code=1008)
                     return
-                print(f"WS: Access GRANTED, proceeding to fetch logs")
+                
                 logging.info(f"Vault access confirmed for user {user.username}, vault {vault_id}")
                 
                 # Fetch filtered logs
@@ -103,85 +126,119 @@ class LogWebSocketHandler:
                     "logs": logs
                 }
                 await self.websocket.send_json(response)
-                print(f"WS: Query successful, sent {len(logs)} logs")
-                logging.info(f"WS query successful for user {user.username}, vault {vault_id}, {len(logs)} logs sent")
-                db.close()
-                print("WS: Scoped session closed, entering event loop")
+                logging.info(f"Query successful, sent {len(logs)} logs")
+                
+                # ✅ Close the query session immediately after use
+                self._close_db_session(db)
+                db = None  # Mark as closed
                 
             except ValueError as ve:
-                print(f"WS: ValueError in query mode: {str(ve)} - likely invalid vault_id or prefixes parsing")
-                import traceback
-                traceback.print_exc()
-                logging.error(f"WS query param error: {ve} - traceback: {traceback.format_exc()}")
-                await self.websocket.send_json({"status": "error", "message": "Invalid vault_id or prefixes", "details": str(ve)})
+                logging.error(f"WS query param error: {ve}")
+                await self.websocket.send_json({
+                    "status": "error", 
+                    "message": "Invalid vault_id or prefixes", 
+                    "details": str(ve)
+                })
             except Exception as e:
-                print(f"WS: Unexpected Exception in query mode: {str(e)}")
+                logging.error(f"WS query error: {e}")
                 import traceback
-                traceback.print_exc()
-                logging.error(f"WS query error: {e} - traceback: {traceback.format_exc()}")
-                await self.websocket.send_json({"status": "error", "error": str(e), "traceback": traceback.format_exc()})
-            
-            # Keep open for potential realtime events or client subscribe
-            logging.info("Query mode completed, entering event loop")
+                await self.websocket.send_json({
+                    "status": "error", 
+                    "error": str(e), 
+                    "traceback": traceback.format_exc()
+                })
+            finally:
+                # ✅ Ensure session is closed even on error
+                if db is not None:
+                    self._close_db_session(db)
         
         # Normal event handling (or continue after query)
         try:
             while True:
                 raw_data = await self.websocket.receive_text()
                 logging.info(f"Received WS message: {raw_data[:50]}...")
+                
+                # ✅ Create a NEW session for EACH message
+                db = self._create_db_session()
+                
                 try:
                     # Handle subscribe for realtime
                     if raw_data.startswith('{"type":"subscribe"'):
-                        await self.websocket.send_json({"status": "subscribed", "vault_id": vault_id_str or 'unknown'})
+                        await self.websocket.send_json({
+                            "status": "subscribed", 
+                            "vault_id": vault_id_str or 'unknown'
+                        })
                         continue
                     
                     payload = LogCreate.model_validate_json(raw_data)
-                    with SessionLocal() as db:
-                        service = LogService(db)
-                        auth_handler = AuthHandlerService(service)
+                    service = LogService(db)
+                    auth_handler = AuthHandlerService(service)
+                    
+                    if payload.event_type == LogEventType.unlock and payload.details:
+                        response = auth_handler.handle_unlock_request(payload)
+                        db.commit()  # ✅ Explicit commit
+                        await self.websocket.send_json(response)
+                    
+                    elif payload.event_type == LogEventType.failed_attempt and payload.details:
+                        vault_id = service._get_vault_id_by_device_id(payload.device_id)
+                        new_log = service.log_failed_unlock_attempt(
+                            device_id=payload.device_id,
+                            user_id=None,
+                            reason=payload.details
+                        )
+                        service.clear_sessions_for_vault(payload.device_id)
+                        db.commit()  # ✅ Explicit commit
+                        await self.websocket.send_json({
+                            "status": "ok", 
+                            "event_type": "failed_attempt"
+                        })
+                    
+                    elif payload.event_type == LogEventType.tamper and payload.details:
+                        new_log = service.log_tamper_detection(
+                            device_id=payload.device_id,
+                            sensor_data=payload.details
+                        )
+                        service.clear_sessions_for_vault(payload.device_id)
+                        db.commit()  # ✅ Explicit commit
+                        await self.websocket.send_json({
+                            "status": "ok", 
+                            "event_type": "tamper"
+                        })
+                    
+                    else:
+                        new_log = service.create_log(
+                            device_id=payload.device_id,
+                            event_type=payload.event_type,
+                            user_id=None,
+                            details=payload.details,
+                        )
+                        db.commit()  # ✅ Explicit commit
                         
-                        if payload.event_type == LogEventType.unlock and payload.details:
-                            response = auth_handler.handle_unlock_request(payload)
-                            await self.websocket.send_json(response)
-                        
-                        elif payload.event_type == LogEventType.failed_attempt and payload.details:
-                            # Get vault_id from device_id for logging
-                            vault_id = service._get_vault_id_by_device_id(payload.device_id)
-
-                            new_log = service.log_failed_unlock_attempt(
-                                device_id=payload.device_id,
-                                user_id=None,  # Anonymous for failed attempts
-                                reason=payload.details
-                            )
-                            service.clear_sessions_for_vault(payload.device_id)
-                            await self.websocket.send_json({"status": "ok", "event_type": "failed_attempt"})
-                        
-                        elif payload.event_type == LogEventType.tamper and payload.details:
-                            new_log = service.log_tamper_detection(
-                                device_id=payload.device_id,
-                                sensor_data=payload.details
-                            )
-                            service.clear_sessions_for_vault(payload.device_id)
-                            await self.websocket.send_json({"status": "ok", "event_type": "tamper"})
-                        
+                        if new_log:
+                            await self.websocket.send_json({
+                                "status": "ok", 
+                                "event_type": new_log.event_type.value
+                            })
                         else:
-                            new_log = service.create_log(
-                                device_id=payload.device_id,
-                                event_type=payload.event_type,
-                                user_id=None,  # Default to anonymous
-                                details=payload.details,
-                            )
-                            if new_log:
-                                await self.websocket.send_json({"status": "ok", "event_type": new_log.event_type.value})
-                            else:
-                                await self.websocket.send_json({"status": "error", "message": "Invalid event_type or details"})
+                            await self.websocket.send_json({
+                                "status": "error", 
+                                "message": "Invalid event_type or details"
+                            })
                 
                 except Exception as e:
-                    print(f"WS: Exception in message processing loop: {str(e)}")
+                    logging.error(f"WS message processing error: {e}")
+                    db.rollback()  # ✅ Rollback on error
                     import traceback
-                    traceback.print_exc()
-                    logging.error(f"WS message processing error: {e} - traceback: {traceback.format_exc()}")
-                    await self.websocket.send_json({"status": "error", "error": str(e), "details": traceback.format_exc()})
+                    await self.websocket.send_json({
+                        "status": "error", 
+                        "error": str(e), 
+                        "details": traceback.format_exc()
+                    })
+                finally:
+                    # ✅ CRITICAL: Close session after EACH message
+                    self._close_db_session(db)
         
         except WebSocketDisconnect:
             logging.info("WebSocket disconnected: /logs/ws")
+        except Exception as e:
+            logging.error(f"WebSocket error: {e}")

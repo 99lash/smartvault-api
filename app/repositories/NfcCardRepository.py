@@ -30,7 +30,7 @@ class NfcCardRepository(Repository):
         Returns:
             NfcCard | None: Returns the NfcCard object if found, else None.
 
-        Example:
+        Example: 
             >>> repo.get_by_uid("AB12CD34")
             <NfcCard uid='AB12CD34' user_id=1 ...>
         """

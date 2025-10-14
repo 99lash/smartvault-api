@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from datetime import datetime, timedelta
 from typing import List, Optional
 from .Repository import Repository
@@ -165,13 +165,21 @@ class LogRepository(Repository):
             .all()
         )
 
-    def get_filtered_logs_by_device(self, device_id: str, prefixes: List[str]) -> List[Log]:
+    def get_filtered_logs_by_device(
+        self, 
+        device_id: str, 
+        prefixes: List[str], 
+        limit: Optional[int] = None,
+        offset: Optional[int] = None  # ✅ Added offset parameter
+    ) -> List[Log]:
         """
         Get logs for a device filtered by details prefixes (starts with any prefix).
 
         Args:
             device_id (str): Device ID to filter by.
             prefixes (List[str]): List of prefixes to match in details (e.g., ['Locked', 'Tamper']).
+            limit (Optional[int]): Maximum number of logs to return (None for all).
+            offset (Optional[int]): Number of logs to skip (default: 0).
 
         Returns:
             List[Log]: Matching logs ordered by timestamp descending.
@@ -179,18 +187,31 @@ class LogRepository(Repository):
         if not prefixes:
             return []
 
-        from sqlalchemy import or_
         like_filters = [self.model.details.like(f"{prefix}%") for prefix in prefixes]
 
-        return (
+        # Build the base query
+        query = (
             self.db.query(self.model)
             .filter(
                 self.model.device_id == device_id,
                 or_(*like_filters)
             )
             .order_by(self.model.created_at.desc())
-            .all()
         )
+
+        # ✅ Apply offset if specified
+        if offset is not None and offset > 0:
+            query = query.offset(offset)
+
+        # Apply limit if specified
+        if limit is not None:
+            query = query.limit(limit)
+        else:
+            query = query.limit(50)  # Default limit to prevent excessive data
+
+        # Execute query
+        logs = query.all()
+        return logs
 
     def delete_old_logs(self, days: int = 90) -> int:
         """Delete logs older than specified days (for maintenance)"""
