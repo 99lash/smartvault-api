@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.services.KeypadPinsService import KeypadPinsService
@@ -25,13 +25,14 @@ router = APIRouter(prefix="/keypad-pins", tags=["keypad_pins"])
 def create_keypad_pin(payload: KeypadPinCreate, db: Session = Depends(get_db)):
     """
     Creates a new keypad pin record.
-    - Pin code must be unique within the user's pins.
-    - Different users can have the same pin code.
+    - Pin code must be unique within the user's pins within the same vault.
+    - Different users can have the same pin code in different vaults.
     - user_id is optional (can be None if unassigned).
+    - vault_id is required to associate the pin with a specific vault.
     """
     try:
         service = KeypadPinsService(db)
-        pin = service.create_keypad_pin(payload.pin_code, payload.user_id)
+        pin = service.create_keypad_pin(payload.pin_code, payload.vault_id, payload.user_id)
         return Response(success=True, data=pin, detail="Pin created successfully")
     except HTTPException:
         raise  # Re-raise HTTP exceptions as-is
@@ -43,16 +44,67 @@ def create_keypad_pin(payload: KeypadPinCreate, db: Session = Depends(get_db)):
 
 
 # -----------------------------
-# List all keypad pins
+# List all keypad pins with optional filtering
 # -----------------------------
 @router.get("/", response_model=list[KeypadPinRead])
-def list_keypad_pins(db: Session = Depends(get_db)):
+def list_keypad_pins(
+    user_id: int | None = Query(None, description="Filter pins by user ID"),
+    vault_id: int | None = Query(None, description="Filter pins by vault ID"),
+    db: Session = Depends(get_db)
+):
     """
-    Returns all keypad pins.
-    - Could later exclude soft-deleted records.
+    Returns keypad pins with optional filtering.
+
+    Query Parameters:
+    - user_id: Filter pins by specific user ID (mutually exclusive with vault_id)
+    - vault_id: Filter pins by vault ID (mutually exclusive with user_id)
+
+    Note: Provide either user_id OR vault_id, but not both.
+    If no filters are provided, returns all pins.
+    """
+    # Manual validation for parameter constraints
+    if user_id is not None and user_id < 1:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="user_id must be greater than 0"
+        )
+
+    if vault_id is not None and vault_id < 1:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="vault_id must be greater than 0"
+        )
+
+    # Validate that only one filter is provided
+    if user_id is not None and vault_id is not None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Provide either user_id or vault_id, but not both"
+        )
+
+    service = KeypadPinsService(db)
+
+    # Apply filters based on provided parameters
+    if user_id is not None:
+        return service.get_user_pins(user_id)
+    elif vault_id is not None:
+        return service.get_vault_pins(vault_id)
+    else:
+        return service.list_keypad_pins()
+
+
+# -----------------------------
+# Get keypad pins by vault ID
+# -----------------------------
+@router.get("/vault/{vault_id}", response_model=list[KeypadPinRead])
+def get_keypad_pins_by_vault(vault_id: int, db: Session = Depends(get_db)):
+    """
+    Returns all keypad pins for a specific vault.
+    - Raises 404 if vault has no pins.
     """
     service = KeypadPinsService(db)
-    return service.list_keypad_pins()
+    pins = service.get_vault_pins(vault_id)
+    return pins
 
 
 # -----------------------------

@@ -18,18 +18,18 @@ class KeypadPinsService:
         self.repo = KeypadPinsRepository(db)
 
     # Create a new keypad pin
-    def create_keypad_pin(self, pin_code: str, user_id: int | None = None) -> KeypadPins:
-        # Check if user already has this pin code (only if user_id is provided)
+    def create_keypad_pin(self, pin_code: str, vault_id: int, user_id: int | None = None) -> KeypadPins:
+        # Check if user already has this pin code within the same vault (only if user_id is provided)
         if user_id:
-            existing_pin = self.repo.get_by_user_and_pin(user_id, pin_code)
+            existing_pin = self.repo.get_by_user_vault_and_pin(user_id, vault_id, pin_code)
             if existing_pin:
                 raise HTTPException(
                     status_code=status.HTTP_409_CONFLICT,
-                    detail=f"User {user_id} already has pin code '{pin_code}'"
+                    detail=f"User {user_id} already has pin code '{pin_code}' in vault {vault_id}"
                 )
 
         try:
-            return self.repo.create(pin_code=pin_code, user_id=user_id)
+            return self.repo.create(pin_code=pin_code, vault_id=vault_id, user_id=user_id)
         except IntegrityError as e:
             if "UNIQUE constraint failed" in str(e):
                 # Handle composite unique constraint violation
@@ -78,3 +78,8 @@ class KeypadPinsService:
     def get_user_pins(self, user_id: int) -> list[KeypadPins]:
         """Get all pins for a specific user"""
         return self.repo.get_by_user_id(user_id)
+
+    # Get all pins for a specific vault
+    def get_vault_pins(self, vault_id: int) -> list[KeypadPins]:
+        """Get all pins for a specific vault"""
+        return self.repo.get_by_vault_id(vault_id)
