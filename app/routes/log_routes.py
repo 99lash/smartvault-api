@@ -17,6 +17,10 @@ from app.services.vaults.VaultService import VaultService
 from app.services.users.UserService import UserService
 from app.services.logs.VaultAccessControllerService import VaultAccessController
 from app.repositories.VaultMembershipRepository import VaultMembershipRepository
+from app.repositories.VaultMembershipRepository import VaultMembershipRepository
+from app.core.dependencies import get_current_user, get_current_admin
+
+# from app.models.Log import Log;
 
 class ValidateAccessRequest(BaseModel):
     vault_id: int
@@ -42,7 +46,7 @@ class LogBulkDeleteResponse(BaseModel):
 router = APIRouter(prefix="/logs", tags=["logs"])
 
 @router.get("/", response_model=list[LogRead])
-def list_logs(db: Session = Depends(get_db)):
+def list_logs(db: Session = Depends(get_db), current_user = Depends(get_current_user)):
     """
     Retrieve all log entries from the database.
     
@@ -58,7 +62,7 @@ def list_logs(db: Session = Depends(get_db)):
     return service.get_all_logs()
 
 @router.delete("/{log_id}", response_model=Response)
-def delete_log(log_id: int, db: Session = Depends(get_db)):
+def delete_log(log_id: int, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
     """
     Delete a log entry by its unique ID.
     
@@ -83,7 +87,7 @@ def delete_log(log_id: int, db: Session = Depends(get_db)):
 @router.delete("/bulk", response_model=Response[LogBulkDeleteResponse])
 def bulk_delete_logs(
     request: LogBulkDeleteRequest,
-    current_user: User = Depends(UserService.get_current_user),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
@@ -146,9 +150,10 @@ def get_filtered_logs(
     prefixes: str = "DUAL,Tamper,Failure,Manual,NFC",
     limit: Optional[int] = None,
     offset: Optional[int] = None,
-    current_user = Depends(UserService.get_current_user),
+    current_user = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
+
     """
     Get logs for a vault filtered by specific details prefixes.
     

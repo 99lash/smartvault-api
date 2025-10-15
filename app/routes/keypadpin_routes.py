@@ -5,6 +5,7 @@ from app.services.KeypadPinsService import KeypadPinsService
 from app.schemas.Response import Response
 from app.schemas.keypad_pin import KeypadPinCreate, KeypadPinAssign, KeypadPinRead
 from app.services.users.UserService import UserService
+from app.core.dependencies import get_current_admin, get_current_user
 # -----------------------------
 # FastAPI router for KeypadPins endpoints
 # -----------------------------
@@ -22,7 +23,7 @@ router = APIRouter(prefix="/keypad-pins", tags=["keypad_pins"])
 # Create a new keypad pin
 # -----------------------------
 @router.post("/", response_model=Response[KeypadPinRead], status_code=status.HTTP_201_CREATED)
-def create_keypad_pin(payload: KeypadPinCreate, db: Session = Depends(get_db)):
+def create_keypad_pin(payload: KeypadPinCreate, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
     """
     Creates a new keypad pin record.
     - Pin code must be unique within the user's pins within the same vault.
@@ -50,8 +51,10 @@ def create_keypad_pin(payload: KeypadPinCreate, db: Session = Depends(get_db)):
 def list_keypad_pins(
     user_id: int | None = Query(None, description="Filter pins by user ID"),
     vault_id: int | None = Query(None, description="Filter pins by vault ID"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
 ):
+
     """
     Returns keypad pins with optional filtering.
 
@@ -111,7 +114,7 @@ def get_keypad_pins_by_vault(vault_id: int, db: Session = Depends(get_db)):
 # Get a keypad pin by ID
 # -----------------------------
 @router.get("/{pin_id}", response_model=KeypadPinRead)
-def get_keypad_pin(pin_id: int, db: Session = Depends(get_db)):
+def get_keypad_pin(pin_id: int, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
     """
     Fetch a single keypad pin by ID.
     - Raises 404 if not found.
@@ -127,7 +130,7 @@ def get_keypad_pin(pin_id: int, db: Session = Depends(get_db)):
 # Get a keypad pin by pin code
 # -----------------------------
 @router.get("/pin/{pin_code}", response_model=KeypadPinRead)
-def get_keypad_pin_by_pin(pin_code: str, db: Session = Depends(get_db)):
+def get_keypad_pin_by_pin(pin_code: str, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
     """
     Fetch a keypad pin by its pin code.
     - Raises 404 if not found.
@@ -143,7 +146,7 @@ def get_keypad_pin_by_pin(pin_code: str, db: Session = Depends(get_db)):
 # Assign a keypad pin to a user
 # -----------------------------
 @router.patch("/{pin_id}/assign", response_model=Response)
-def assign_keypad_pin_to_user(pin_id: int, payload: KeypadPinAssign, db: Session = Depends(get_db)):
+def assign_keypad_pin_to_user(pin_id: int, payload: KeypadPinAssign, db: Session = Depends(get_db), current_user = Depends(get_current_admin)):
     """
     Assigns an existing keypad pin to a user.
     - Updates the `user_id` field.
@@ -166,7 +169,7 @@ def assign_keypad_pin_to_user(pin_id: int, payload: KeypadPinAssign, db: Session
 # Delete a keypad pin
 # -----------------------------
 @router.delete("/{pin_id}", response_model=Response)
-def delete_keypad_pin(pin_id: int, db: Session = Depends(get_db)):
+def delete_keypad_pin(pin_id: int, db: Session = Depends(get_db), current_user = Depends(get_current_admin)):
     """
     Deletes a keypad pin by ID.
     - Soft deletes if the model has a deleted_at column.

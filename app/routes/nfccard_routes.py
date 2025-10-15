@@ -6,6 +6,7 @@ from app.services.NfcCardService import NfcCardService
 from app.services.users.UserService import UserService
 from app.schemas.nfc_card import NfcCardCreate, NfcCardAssign, NfcCardRead
 from app.schemas.Response import Response
+from app.core.dependencies import get_current_admin, get_current_user
 
 router = APIRouter(prefix="/nfc-cards", tags=["NFC Cards"])
 
@@ -13,7 +14,7 @@ router = APIRouter(prefix="/nfc-cards", tags=["NFC Cards"])
 # Create a new NFC card
 # -----------------------------
 @router.post("/", response_model=Response[NfcCardRead], status_code=status.HTTP_201_CREATED)
-def create_nfc_card(payload: NfcCardCreate, db: Session = Depends(get_db)):
+def create_nfc_card(payload: NfcCardCreate, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
     """
     Creates a new nfc card record.
     - Requires a NFC card uid 
@@ -27,7 +28,7 @@ def create_nfc_card(payload: NfcCardCreate, db: Session = Depends(get_db)):
 # Get all NFC cards
 # -----------------------------
 @router.get("/", response_model=List[NfcCardRead])
-def list_nfc_cards(db: Session = Depends(get_db)):
+def list_nfc_cards(db: Session = Depends(get_db), current_user = Depends(get_current_user)):
     """
     Returns all NFC cards.
     - Could later exclude soft-deleted records.
@@ -39,7 +40,7 @@ def list_nfc_cards(db: Session = Depends(get_db)):
 # Get NFC card by UID
 # -----------------------------
 @router.get("/uid/{uid}", response_model=NfcCardRead)
-def get_card_by_uid(uid: str, db: Session = Depends(get_db)):
+def get_card_by_uid(uid: str, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
     """
     Fetch a single NFC card by UID.
     - Raises 404 if not found.
@@ -54,7 +55,7 @@ def get_card_by_uid(uid: str, db: Session = Depends(get_db)):
 # Get all cards assigned to a user
 # -----------------------------
 @router.get("/user/{user_id}", response_model=List[NfcCardRead])
-def get_cards_by_user(user_id: int, db: Session = Depends(get_db)):
+def get_cards_by_user(user_id: int, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
     """
     Fetch user all NFC cards.
     - Raises 404 if user not found.  
@@ -69,7 +70,7 @@ def get_cards_by_user(user_id: int, db: Session = Depends(get_db)):
 # Assign card to user
 # -----------------------------
 @router.patch("/{card_id}/assign", response_model=Response)
-def assign_card_to_user(card_id: int, payload: NfcCardAssign, db: Session = Depends(get_db)):
+def assign_card_to_user(card_id: int, payload: NfcCardAssign, db: Session = Depends(get_db), current_user = Depends(get_current_admin)):
     """
     Assigns an existing NFC card to a user.
     - Updates the `user_id` field.
@@ -91,7 +92,7 @@ def assign_card_to_user(card_id: int, payload: NfcCardAssign, db: Session = Depe
 # Soft delete a NFC card
 # -----------------------------
 @router.delete("/{card_id}", response_model=Response)
-def delete_nfc_card(card_id: int, db: Session = Depends(get_db)):
+def delete_nfc_card(card_id: int, db: Session = Depends(get_db), current_user = Depends(get_current_admin)):
     """
     Deletes an NFC card by ID.
     - Soft deletes if the model has a deleted_at column.
