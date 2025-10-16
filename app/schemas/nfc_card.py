@@ -37,21 +37,16 @@ class NfcCardRead(SQLModel, table=False):
 
     class Config:
 
-            from_attributes = True
+        from_attributes = True
 
 
 class NfcCardWithUser(SQLModel, table=False):
 
     """
-
     Schema for returning NFC card information with the assigned user's username.
-
     """
 
     nfc_card_id: int
-
     nfc_card_uid: str
-
     nfc_card_name: Optional[str] = None
-
     username: str
