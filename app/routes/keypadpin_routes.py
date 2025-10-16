@@ -260,7 +260,71 @@ def assign_keypad_pin_to_user(pin_id: int, payload: KeypadPinAssign, db: Session
 
 
 # -----------------------------
-# Delete a keypad pin
+# Hard delete a keypad pin (permanent deletion)
+# -----------------------------
+@router.delete("/{pin_id}/hard", response_model=Response)
+def hard_delete_keypad_pin(
+    pin_id: int,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    """
+    Permanently deletes a keypad pin by ID.
+    WARNING: This action cannot be undone!
+
+    Authorization:
+    - User must be an admin of the vault that the PIN belongs to
+    - System-wide admin role is not required
+
+    Raises:
+    - 404: If PIN not found
+    - 403: If user lacks vault admin permissions
+    - 500: If deletion fails unexpectedly
+    """
+    try:
+        # First get the PIN to find which vault it belongs to
+        keypad_service = KeypadPinsService(db)
+        pin = keypad_service.get_keypad_pin_by_id(pin_id)
+
+        if not pin:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Keypad Pin not found"
+            )
+
+        # Check if user is admin of the vault that this PIN belongs to
+        membership_service = VaultMembershipService(db)
+        if not membership_service.is_user_admin_of_vault(current_user.id, pin.vault_id):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Admin access to the vault required to delete PINs"
+            )
+
+        # Proceed with hard deletion
+        deleted = keypad_service.hard_delete_pin(pin_id)
+        if not deleted:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to delete PIN"
+            )
+
+        return Response(
+            success=True,
+            detail=f"Keypad Pin {pin_id} permanently deleted"
+        )
+
+    except HTTPException:
+        # Re-raise HTTP exceptions as-is
+        raise
+    except Exception as e:
+        # Handle unexpected errors
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"An unexpected error occurred while deleting PIN: {str(e)}"
+        )
+
+# -----------------------------
+# Delete a keypad pin (soft delete)
 # -----------------------------
 @router.delete("/{pin_id}", response_model=Response)
 def delete_keypad_pin(

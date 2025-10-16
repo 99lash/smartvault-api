@@ -32,3 +32,20 @@ class KeypadPinsRepository(Repository):
     def get_by_vault_id(self, vault_id: int):
         """Fetch all keypad pins for a specific vault"""
         return self.db.query(self.model).filter(self.model.vault_id == vault_id).all()
+
+    def hard_delete(self, pin_id: int) -> bool:
+        """
+        Permanently delete a keypad pin from the database.
+
+        Args:
+            pin_id (int): ID of the keypad pin to delete
+
+        Returns:
+            bool: True if pin was deleted, False if not found
+        """
+        pin = self.db.query(self.model).filter(self.model.id == pin_id).first()
+        if pin:
+            self.db.delete(pin)
+            self.db.commit()
+            return True
+        return False

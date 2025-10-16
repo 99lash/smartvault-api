@@ -83,3 +83,8 @@ class KeypadPinsService:
     def get_vault_pins(self, vault_id: int) -> list[KeypadPins]:
         """Get all pins for a specific vault"""
         return self.repo.get_by_vault_id(vault_id)
+
+    # Hard delete a keypad pin (permanent deletion)
+    def hard_delete_pin(self, pin_id: int) -> bool:
+        """Permanently delete a keypad pin from the database."""
+        return self.repo.hard_delete(pin_id)
