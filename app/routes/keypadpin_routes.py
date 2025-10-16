@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.services.KeypadPinsService import KeypadPinsService
+from app.services.vaults.VaultMembershipService import VaultMembershipService
 from app.schemas.Response import Response
 from app.schemas.keypad_pin import KeypadPinCreate, KeypadPinAssign, KeypadPinRead
 from app.services.users.UserService import UserService
@@ -89,11 +90,46 @@ def list_keypad_pins(
 
     # Apply filters based on provided parameters
     if user_id is not None:
-        return service.get_user_pins(user_id)
+        pins = service.get_user_pins(user_id)
     elif vault_id is not None:
-        return service.get_vault_pins(vault_id)
+        pins = service.get_vault_pins(vault_id)
     else:
-        return service.list_keypad_pins()
+        pins = service.list_keypad_pins()
+
+    # Enhance pins with user information for better UI display
+    enhanced_pins = []
+    user_service = UserService(db)  # Initialize UserService
+
+    for pin in pins:
+        pin_dict = pin.__dict__.copy()
+
+        # If PIN has a user_id, fetch user details
+        if pin.user_id:
+            user = user_service.get_user_by_id(pin.user_id)
+            if user:
+                pin_dict.update({
+                    'username': user.username,
+                    'first_name': user.first_name,
+                    'last_name': user.last_name
+                })
+            else:
+                # User not found, provide null values
+                pin_dict.update({
+                    'username': None,
+                    'first_name': None,
+                    'last_name': None
+                })
+        else:
+            # No user assigned to PIN
+            pin_dict.update({
+                'username': None,
+                'first_name': None,
+                'last_name': None
+            })
+
+        enhanced_pins.append(pin_dict)
+
+    return enhanced_pins
 
 
 # -----------------------------
@@ -123,7 +159,36 @@ def get_keypad_pin(pin_id: int, db: Session = Depends(get_db), current_user = De
     pin = service.get_keypad_pin_by_id(pin_id)
     if not pin:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Keypad Pin not found")
-    return pin
+
+    # Enhance pin with user information for better UI display
+    pin_dict = pin.__dict__.copy()
+
+    # If PIN has a user_id, fetch user details
+    if pin.user_id:
+        user_service = UserService(db)  # Initialize UserService
+        user = user_service.get_user_by_id(pin.user_id)
+        if user:
+            pin_dict.update({
+                'username': user.username,
+                'first_name': user.first_name,
+                'last_name': user.last_name
+            })
+        else:
+            # User not found, provide null values
+            pin_dict.update({
+                'username': None,
+                'first_name': None,
+                'last_name': None
+            })
+    else:
+        # No user assigned to PIN
+        pin_dict.update({
+            'username': None,
+            'first_name': None,
+            'last_name': None
+        })
+
+    return pin_dict
 
 
 # -----------------------------
@@ -139,7 +204,36 @@ def get_keypad_pin_by_pin(pin_code: str, db: Session = Depends(get_db), current_
     pin = service.get_keypad_pin_by_pin(pin_code)
     if not pin:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Keypad Pin not found")
-    return pin
+
+    # Enhance pin with user information for better UI display
+    pin_dict = pin.__dict__.copy()
+
+    # If PIN has a user_id, fetch user details
+    if pin.user_id:
+        user_service = UserService(db)  # Initialize UserService
+        user = user_service.get_user_by_id(pin.user_id)
+        if user:
+            pin_dict.update({
+                'username': user.username,
+                'first_name': user.first_name,
+                'last_name': user.last_name
+            })
+        else:
+            # User not found, provide null values
+            pin_dict.update({
+                'username': None,
+                'first_name': None,
+                'last_name': None
+            })
+    else:
+        # No user assigned to PIN
+        pin_dict.update({
+            'username': None,
+            'first_name': None,
+            'last_name': None
+        })
+
+    return pin_dict
 
 
 # -----------------------------
@@ -169,14 +263,61 @@ def assign_keypad_pin_to_user(pin_id: int, payload: KeypadPinAssign, db: Session
 # Delete a keypad pin
 # -----------------------------
 @router.delete("/{pin_id}", response_model=Response)
-def delete_keypad_pin(pin_id: int, db: Session = Depends(get_db), current_user = Depends(get_current_admin)):
+def delete_keypad_pin(
+    pin_id: int,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
     """
     Deletes a keypad pin by ID.
-    - Soft deletes if the model has a deleted_at column.
-    - Raises 404 if not found.
+
+    Authorization:
+    - User must be an admin of the vault that the PIN belongs to
+    - System-wide admin role is not required
+
+    Raises:
+    - 404: If PIN not found
+    - 403: If user lacks vault admin permissions
+    - 500: If deletion fails unexpectedly
     """
-    service = KeypadPinsService(db)
-    pin = service.delete_keypad_pin(pin_id)
-    if not pin:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Keypad Pin not found")
-    return Response(success=True, detail=f"Keypad Pin {pin_id} deleted successfully")
+    try:
+        # First get the PIN to find which vault it belongs to
+        keypad_service = KeypadPinsService(db)
+        pin = keypad_service.get_keypad_pin_by_id(pin_id)
+
+        if not pin:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Keypad Pin not found"
+            )
+
+        # Check if user is admin of the vault that this PIN belongs to
+        membership_service = VaultMembershipService(db)
+        if not membership_service.is_user_admin_of_vault(current_user.id, pin.vault_id):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Admin access to the vault required to delete PINs"
+            )
+
+        # Proceed with deletion
+        deleted_pin = keypad_service.delete_keypad_pin(pin_id)
+        if not deleted_pin:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to delete PIN"
+            )
+
+        return Response(
+            success=True,
+            detail=f"Keypad Pin {pin_id} deleted successfully"
+        )
+
+    except HTTPException:
+        # Re-raise HTTP exceptions as-is
+        raise
+    except Exception as e:
+        # Handle unexpected errors
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"An unexpected error occurred while deleting PIN: {str(e)}"
+        )
