@@ -8,6 +8,7 @@ class NfcCard(Model, table=True):
     __tablename__ = "nfc_cards"
 
     uid: str = Field(nullable=False, unique=True, index=True, description="Unique NFC card identifier")
+    name: Optional[str] = Field(default=None, nullable=True, description="User-defined name for the card")
     user_id: Optional[int] = Field(default=None, foreign_key="users.id", description="Owner of the NFC card")
     # relationships (optional, if you have User model)
     user: Optional["User"] = Relationship(back_populates="nfc_cards")

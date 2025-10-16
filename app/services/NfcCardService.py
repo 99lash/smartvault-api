@@ -24,9 +24,9 @@ class NfcCardService:
         """
         self.repo = NfcCardRepository(db)
 
-    def create_card(self, uid: str, user_id: Optional[int] = None) -> NfcCard:
+    def create_card(self, uid: str, name: Optional[str] = None, user_id: Optional[int] = None) -> NfcCard:
         """Create a new NFC card.""" 
-        return self.repo.create(uid=uid, user_id=user_id)
+        return self.repo.create(uid=uid, name=name, user_id=user_id)
 
     def get_card_by_uid(self, uid: str) -> Optional[NfcCard]:
         """Retrieve a card by its UID."""
@@ -52,3 +52,7 @@ class NfcCardService:
     def delete_card(self, card_id: int) -> Optional[NfcCard]:
         """Soft-delete an NFC card by ID."""
         return self.repo.delete(card_id)
+
+    def get_all_cards_with_users(self) -> list[tuple[NfcCard, str]]:
+        """Get all NFC cards with their assigned usernames."""
+        return self.repo.get_all_with_users()
