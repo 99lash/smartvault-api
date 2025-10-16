@@ -56,3 +56,15 @@ class NfcCardService:
     def get_all_cards_with_users(self) -> list[tuple[NfcCard, str]]:
         """Get all NFC cards with their assigned usernames."""
         return self.repo.get_all_with_users()
+
+    def get_cards_by_vault(self, vault_id: int) -> List[NfcCard]:
+        """Retrieve all NFC cards for a specific vault."""
+        return self.repo.get_by_vault(vault_id)
+
+    def get_cards_by_vault_with_users(self, vault_id: int) -> list[tuple[NfcCard, str]]:
+        """Retrieve all NFC cards for a vault with their assigned usernames."""
+        return self.repo.get_by_vault_with_users(vault_id)
+
+    def hard_delete_card(self, card_id: int) -> bool:
+        """Permanently delete an NFC card from the database."""
+        return self.repo.hard_delete(card_id)

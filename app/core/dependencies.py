@@ -17,25 +17,9 @@ def get_current_user(
     Dependency to extract and validate the current user from the Authorization header.
     Raises 401 if no valid Bearer token is provided.
     """
+    
     user_service = UserService(db)
     return user_service.validate_token(token)
-
-
-# def get_current_user(
-#     authorization: str = Header(..., description="Bearer access token"),
-#     db: Session = Depends(get_db)
-# ) -> User:
-#     """
-#     Dependency to extract and validate the current user from the Authorization header.
-#     Raises 401 if no valid Bearer token is provided.
-#     """
-#     if not authorization or not authorization.startswith("Bearer "):
-#         raise HTTPException(status_code=401, detail="Not authenticated")
-
-#     token = authorization.split(" ")[1]
-#     user_service = UserService(db)
-#     return user_service.validate_token(token)
-
 
 def get_current_admin(
     current_user: User = Depends(get_current_user)

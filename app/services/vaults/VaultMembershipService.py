@@ -71,3 +71,17 @@ class VaultMembershipService:
 
     def is_user_admin_of_vault(self, user_id: int, vault_id: int) -> bool:
         return self.repo.is_user_admin_of_vault(user_id, vault_id)
+
+    def is_user_member_of_vault(self, user_id: int, vault_id: int) -> bool:
+        """
+        Check if a user is a member of a specific vault.
+
+        Args:
+            user_id (int): ID of the user to check
+            vault_id (int): ID of the vault to check
+
+        Returns:
+            bool: True if user is a member of the vault, False otherwise
+        """
+        membership = self.repo.get_by_user_and_vault(user_id, vault_id)
+        return membership is not None

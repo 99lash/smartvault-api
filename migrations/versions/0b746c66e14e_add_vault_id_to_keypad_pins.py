@@ -52,12 +52,6 @@ def upgrade() -> None:
     # Step 4: Create index on vault_id
     op.create_index(op.f('ix_keypad_pins_vault_id'), 'keypad_pins', ['vault_id'], unique=False)
 
-    # Update constraints for the new vault_id field
-    op.drop_constraint(op.f('uq_user_pin'), 'keypad_pins', type_='unique')
-    op.create_index(op.f('ix_keypad_pins_vault_id'), 'keypad_pins', ['vault_id'], unique=False)
-    op.create_unique_constraint('uq_user_vault_pin', 'keypad_pins', ['user_id', 'vault_id', 'pin_code'])
-    op.create_foreign_key(None, 'keypad_pins', 'vaults', ['vault_id'], ['id'])
-
     # ### end commands ###
 
 

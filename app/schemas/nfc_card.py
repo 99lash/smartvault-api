@@ -12,6 +12,7 @@ class NfcCardCreate(SQLModel, table=False):
     uid: str = Field(..., description="Unique identifier of the NFC card")
     name: Optional[str] = Field(None, description="User-defined name for the card (optional)")
     user_id: Optional[int] = Field(None, description="ID of the user to assign the card to (optional)")
+    vault_id: int = Field(..., description="ID of the vault this NFC card belongs to")
 
 class NfcCardAssign(SQLModel, table=False):
     """
