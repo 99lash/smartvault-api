@@ -7,7 +7,7 @@ load_dotenv()
 
 class Settings(BaseSettings):
     # Existing settings
-    REDIS_URL: str = "redis://localhost:6379"
+    REDIS_URL: str = "redis://redis:6379"
     API_V1_STR: str = "/api/v1"
 
     # JWT Configuration - All configurable via environment variables

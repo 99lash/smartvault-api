@@ -4,16 +4,30 @@ from app.services.logs.LogService import LogService
 from app.services.logs.AuthHandlerService import AuthHandlerService
 from app.services.logs.VaultAccessControllerService import VaultAccessController
 from app.services.logs.LogQueryService import LogQueryService
+from app.services.logs.BruteforceDetectionService import BruteforceDetectionService
 from app.services.users.UserService import UserService
 from app.repositories.VaultMembershipRepository import VaultMembershipRepository
 from app.models.Log import LogEventType
 from app.core.database import get_db_manual
 import logging
+import json
 
 class LogWebSocketHandler:
     def __init__(self, websocket: WebSocket):
         self.websocket = websocket
         self.db_sessions = []  # ✅ Track all DB sessions for cleanup
+
+    def _get_redis_services(self):
+        """Get Redis services from the app state"""
+        try:
+            from app.main import app
+            return (
+                app.state.redis_client,
+                app.state.bruteforce_service,
+                app.state.event_manager
+            )
+        except Exception:
+            return None, None, None
     
     def _create_db_session(self):
         """Create and track a new DB session"""
@@ -181,6 +195,23 @@ class LogWebSocketHandler:
                     
                     elif payload.event_type == LogEventType.failed_attempt and payload.details:
                         vault_id = service._get_vault_id_by_device_id(payload.device_id)
+
+                        # Use Redis-based bruteforce detection if available
+                        redis_client, bruteforce_service, event_manager = self._get_redis_services()
+                        tamper_detected = False
+
+                        if bruteforce_service and redis_client:
+                            try:
+                                # Check for bruteforce using Redis
+                                method = "nfc" if "NFC" in payload.details else "pin"
+                                tamper_detected = bruteforce_service.check_threshold_and_log_tamper(
+                                    vault_id, method
+                                )
+                                logging.info(f"Bruteforce check for vault {vault_id}, method {method}: {'TAMPER' if tamper_detected else 'OK'}")
+                            except Exception as e:
+                                logging.error(f"Bruteforce detection error: {e}")
+                                tamper_detected = False
+
                         new_log = service.log_failed_unlock_attempt(
                             device_id=payload.device_id,
                             user_id=None,
@@ -188,9 +219,25 @@ class LogWebSocketHandler:
                         )
                         service.clear_sessions_for_vault(payload.device_id)
                         db.commit()  # ✅ Explicit commit
+
+                        # Broadcast to Redis if event manager is available
+                        if event_manager and new_log:
+                            try:
+                                await event_manager._broadcast_to_vault(vault_id, {
+                                    "id": new_log.id,
+                                    "device_id": new_log.device_id,
+                                    "event_type": new_log.event_type.value,
+                                    "details": new_log.details,
+                                    "created_at": new_log.created_at.isoformat(),
+                                    "tamper_detected": tamper_detected
+                                })
+                            except Exception as e:
+                                logging.error(f"Event broadcast error: {e}")
+
                         await self.websocket.send_json({
-                            "status": "ok", 
-                            "event_type": "failed_attempt"
+                            "status": "ok",
+                            "event_type": "failed_attempt",
+                            "tamper_detected": tamper_detected
                         })
                     
                     elif payload.event_type == LogEventType.tamper and payload.details:
@@ -213,15 +260,30 @@ class LogWebSocketHandler:
                             details=payload.details,
                         )
                         db.commit()  # ✅ Explicit commit
-                        
+
                         if new_log:
+                            # Broadcast to Redis if event manager is available
+                            redis_client, bruteforce_service, event_manager = self._get_redis_services()
+                            if event_manager:
+                                try:
+                                    vault_id = service._get_vault_id_by_device_id(payload.device_id)
+                                    await event_manager._broadcast_to_vault(vault_id, {
+                                        "id": new_log.id,
+                                        "device_id": new_log.device_id,
+                                        "event_type": new_log.event_type.value,
+                                        "details": new_log.details,
+                                        "created_at": new_log.created_at.isoformat()
+                                    })
+                                except Exception as e:
+                                    logging.error(f"Event broadcast error: {e}")
+
                             await self.websocket.send_json({
-                                "status": "ok", 
+                                "status": "ok",
                                 "event_type": new_log.event_type.value
                             })
                         else:
                             await self.websocket.send_json({
-                                "status": "error", 
+                                "status": "error",
                                 "message": "Invalid event_type or details"
                             })
                 
