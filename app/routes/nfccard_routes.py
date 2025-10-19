@@ -9,6 +9,8 @@ from app.schemas.nfc_card import NfcCardCreate, NfcCardAssign, NfcCardRead, NfcC
 from app.schemas.Response import Response
 from app.core.dependencies import get_current_admin, get_current_user
 from app.services.vaults.VaultMembershipService import VaultMembershipService
+from app.services.VaultAccessControlService import VaultAccessControlService
+from app.models.VaultMembership import MembershipRole
 
 router = APIRouter(
     prefix="/nfc-cards",
@@ -36,22 +38,64 @@ def list_nfc_cards_with_users(db: Session = Depends(get_db), current_user = Depe
 @router.post("/", response_model=Response[NfcCardRead], status_code=status.HTTP_201_CREATED)
 def create_nfc_card(payload: NfcCardCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """
-    Creates a new nfc card record.
-    - Requires a NFC card uid and vault_id
-    - user_id is optional (can be None if unassigned)
-    - User must be an admin of the specified vault
+    Creates a new NFC card record with role-based access control.
+    
+    Role-based behavior:
+    - MEMBER: Limited to 1 NFC card per vault, automatically assigned to themselves
+    - ADMIN: Unlimited NFC cards, can assign to any vault member or leave unassigned
+    - GUEST: Cannot create NFC cards (read-only access)
+    
+    Args:
+        payload: NFC card creation data including uid, vault_id, name, and optional user_id
+        current_user: Currently authenticated user
+        db: Database session
     """
-    # Check if user is an admin of the specified vault
-    vault_service = VaultMembershipService(db)
-    if not vault_service.is_user_admin_of_vault(current_user.id, payload.vault_id):
+    # Initialize access control service
+    access_control = VaultAccessControlService(db)
+    
+    # Check vault membership and get user role
+    is_member, role = access_control.check_vault_access_and_role(current_user.id, payload.vault_id)
+    
+    if not is_member:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"User must be an admin of vault {payload.vault_id} to register NFC cards"
+            detail="User is not a member of this vault"
         )
-
+    
+    # Enforce role-based limits
+    access_control.enforce_nfc_card_limit(current_user.id, payload.vault_id)
+    
+    # Determine user_id based on role
+    if role == MembershipRole.member:
+        # Members must have the card assigned to themselves
+        user_id = current_user.id
+    elif role == MembershipRole.admin:
+        # Admins can choose to assign or leave unassigned
+        user_id = payload.user_id
+    else:
+        # Guests cannot create cards (should be caught by enforce_nfc_card_limit)
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Guest users cannot create NFC cards"
+        )
+    
+    # Create the NFC card
     service = NfcCardService(db)
-    nfcCard = service.create_card(uid=payload.uid, name=payload.name, user_id=payload.user_id)
-    return Response(success=True, data=nfcCard, detail="NFC Card successfully created")
+    nfc_card = service.create_card(
+        uid=payload.uid,
+        vault_id=payload.vault_id,
+        name=payload.name,
+        user_id=user_id
+    )
+    
+    # Prepare response message based on role
+    if role == MembershipRole.member:
+        detail = "NFC Card successfully created and assigned to you"
+    else:
+        assignment_msg = f" and assigned to user {user_id}" if user_id else " (unassigned)"
+        detail = f"NFC Card successfully created{assignment_msg}"
+    
+    return Response(success=True, data=nfc_card, detail=detail)
 
 # -----------------------------
 # Get all NFC cards
