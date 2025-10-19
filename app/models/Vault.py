@@ -7,6 +7,7 @@ if TYPE_CHECKING:
     from .Log import Log
     from .VaultMembership import VaultMembership
     from .VaultInvitation import VaultInvitation
+    from .NfcCard import NfcCard
 
 # ENUM VaultStatus
 class VaultStatus(str, enum.Enum):
@@ -34,6 +35,7 @@ class Vault(Model, table=True):
     logs: Optional[List["Log"]] = Relationship(back_populates="vault")  # Commented out due to device_id relationship complexity
     vault_memberships: Optional[List["VaultMembership"]] = Relationship(back_populates="vault")
     vault_invitations: Optional[List["VaultInvitation"]] = Relationship(back_populates="vault")
+    nfc_cards: Optional[List["NfcCard"]] = Relationship(back_populates="vault")
 
     def __init__(self, **kwargs):
         """
