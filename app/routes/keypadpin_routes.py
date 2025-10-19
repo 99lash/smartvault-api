@@ -3,10 +3,12 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.services.KeypadPinsService import KeypadPinsService
 from app.services.vaults.VaultMembershipService import VaultMembershipService
+from app.services.VaultAccessControlService import VaultAccessControlService
 from app.schemas.Response import Response
 from app.schemas.keypad_pin import KeypadPinCreate, KeypadPinAssign, KeypadPinRead
 from app.services.users.UserService import UserService
 from app.core.dependencies import get_current_admin, get_current_user
+from app.models.VaultMembership import MembershipRole
 # -----------------------------
 # FastAPI router for KeypadPins endpoints
 # -----------------------------
@@ -26,16 +28,64 @@ router = APIRouter(prefix="/keypad-pins", tags=["keypad_pins"])
 @router.post("/", response_model=Response[KeypadPinRead], status_code=status.HTTP_201_CREATED)
 def create_keypad_pin(payload: KeypadPinCreate, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
     """
-    Creates a new keypad pin record.
-    - Pin code must be unique within the user's pins within the same vault.
-    - Different users can have the same pin code in different vaults.
-    - user_id is optional (can be None if unassigned).
-    - vault_id is required to associate the pin with a specific vault.
+    Creates a new keypad pin record with role-based access control.
+    
+    Role-based behavior:
+    - MEMBER: Limited to 1 keypad pin per vault, automatically assigned to themselves
+    - ADMIN: Unlimited keypad pins, can assign to any vault member or leave unassigned
+    - GUEST: Cannot create keypad pins (read-only access)
+    
+    Pin code must be unique within the user's pins within the same vault.
+    Different users can have the same pin code in different vaults.
+    
+    Args:
+        payload: Keypad pin creation data including pin_code, vault_id, and optional user_id
+        current_user: Currently authenticated user
+        db: Database session
     """
     try:
+        # Initialize access control service
+        access_control = VaultAccessControlService(db)
+        
+        # Check vault membership and get user role
+        is_member, role = access_control.check_vault_access_and_role(current_user.id, payload.vault_id)
+        
+        if not is_member:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="User is not a member of this vault"
+            )
+        
+        # Enforce role-based limits
+        access_control.enforce_keypad_pin_limit(current_user.id, payload.vault_id)
+        
+        # Determine user_id based on role
+        if role == MembershipRole.member:
+            # Members must have the pin assigned to themselves
+            user_id = current_user.id
+        elif role == MembershipRole.admin:
+            # Admins can choose to assign or leave unassigned
+            user_id = payload.user_id
+        else:
+            # Guests cannot create pins (should be caught by enforce_keypad_pin_limit)
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Guest users cannot create keypad pins"
+            )
+        
+        # Create the keypad pin
         service = KeypadPinsService(db)
-        pin = service.create_keypad_pin(payload.pin_code, payload.vault_id, payload.user_id)
-        return Response(success=True, data=pin, detail="Pin created successfully")
+        pin = service.create_keypad_pin(payload.pin_code, payload.vault_id, user_id)
+        
+        # Prepare response message based on role
+        if role == MembershipRole.member:
+            detail = "Keypad pin successfully created and assigned to you"
+        else:
+            assignment_msg = f" and assigned to user {user_id}" if user_id else " (unassigned)"
+            detail = f"Keypad pin successfully created{assignment_msg}"
+        
+        return Response(success=True, data=pin, detail=detail)
+        
     except HTTPException:
         raise  # Re-raise HTTP exceptions as-is
     except Exception as e:
