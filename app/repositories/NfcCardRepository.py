@@ -69,14 +69,11 @@ class NfcCardRepository(Repository):
             list[NfcCard]: List of NfcCard objects in the vault.
             If no cards are found, returns an empty list.
 
-        Note:
-            This method doesn't exist in the current model since NFC cards
-            don't have a direct vault_id relationship. This would need to be
-            implemented based on how vault-card relationship is structured.
+        Example:
+            >>> repo.get_by_vault(1)
+            [<NfcCard uid='AB12CD34' vault_id=1 ...>, <NfcCard uid='EF56GH78' vault_id=1 ...>]
         """
-        # For now, return all cards since the vault relationship isn't implemented
-        # In a real implementation, this would filter by vault_id
-        return self.db.query(self.model).all()
+        return self.db.query(self.model).filter(self.model.vault_id == vault_id).all()
 
     def get_by_vault_with_users(self, vault_id: int) -> list[tuple[NfcCard, str]]:
         """
@@ -88,14 +85,18 @@ class NfcCardRepository(Repository):
         Returns:
             list[tuple[NfcCard, str]]: List of tuples containing (NfcCard, username).
             Username is None if card is not assigned to a user.
+
+        Example:
+            >>> repo.get_by_vault_with_users(1)
+            [(<NfcCard uid='AB12CD34' vault_id=1 ...>, 'john_doe'), 
+             (<NfcCard uid='EF56GH78' vault_id=1 ...>, None)]
         """
         from app.models.User import User
 
-        # For now, return all cards with usernames since vault relationship isn't implemented
-        # In a real implementation, this would filter by vault_id
         return (
             self.db.query(NfcCard, User.username)
             .outerjoin(User, NfcCard.user_id == User.id)
+            .filter(NfcCard.vault_id == vault_id)
             .all()
         )
 
