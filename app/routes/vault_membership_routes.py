@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
 from app.services.vaults.VaultMembershipService import VaultMembershipService
+from app.services.VaultAccessControlService import VaultAccessControlService
 from app.models.User import User
 from app.models.Vault import Vault
 from app.models.VaultMembership import MembershipRole
@@ -253,3 +254,57 @@ def get_current_user_vaults(
         ))
 
     return Response(success=True, data=response_data)
+
+
+# -----------------------------
+# Get access limits for current user in a vault
+# -----------------------------
+@router.get("/vaults/{vault_id}/access-limits", response_model=Response)
+def get_access_limits(
+    vault_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Get current access limits and counts for the user in this vault.
+    
+    This endpoint provides comprehensive information about:
+    - User's role in the vault
+    - Current counts of NFC cards and keypad pins
+    - Limits based on role (None for unlimited, number for limited)
+    - Boolean flags indicating if user can create resources
+    
+    This information is designed for frontend consumption to:
+    - Display appropriate UI controls
+    - Show/hide create buttons
+    - Display current usage vs limits
+    - Provide user feedback about their permissions
+    
+    Args:
+        vault_id: ID of the vault to check limits for
+        current_user: Currently authenticated user
+        db: Database session
+        
+    Returns:
+        Response with access limits information including:
+        - is_member: Whether user is a member of the vault
+        - role: User's role in the vault (admin/member/guest)
+        - nfc_cards: Current count, limit, and can_create flag
+        - keypad_pins: Current count, limit, and can_create flag
+    """
+    access_control = VaultAccessControlService(db)
+    
+    # Get comprehensive limits information
+    limits_info = access_control.get_user_limits_info(current_user.id, vault_id)
+    
+    if not limits_info["is_member"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User is not a member of this vault"
+        )
+    
+    return Response(
+        success=True,
+        data=limits_info,
+        detail=f"Access limits retrieved for vault {vault_id}"
+    )
