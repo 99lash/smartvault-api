@@ -24,9 +24,28 @@ class NfcCardService:
         """
         self.repo = NfcCardRepository(db)
 
-    def create_card(self, uid: str, name: Optional[str] = None, user_id: Optional[int] = None) -> NfcCard:
-        """Create a new NFC card.""" 
-        return self.repo.create(uid=uid, name=name, user_id=user_id)
+    def create_card(self, uid: str, vault_id: int, name: Optional[str] = None, user_id: Optional[int] = None) -> NfcCard:
+        """
+        Create a new NFC card.
+        
+        Args:
+            uid (str): Unique identifier of the NFC card
+            vault_id (int): ID of the vault this NFC card belongs to
+            name (Optional[str]): User-defined name for the card
+            user_id (Optional[int]): ID of the user to assign the card to
+            
+        Returns:
+            NfcCard: The created NFC card object
+            
+        Raises:
+            ValueError: If required parameters are missing or invalid
+        """
+        if not uid:
+            raise ValueError("UID is required for NFC card creation")
+        if not vault_id:
+            raise ValueError("Vault ID is required for NFC card creation")
+            
+        return self.repo.create(uid=uid, vault_id=vault_id, name=name, user_id=user_id)
 
     def get_card_by_uid(self, uid: str) -> Optional[NfcCard]:
         """Retrieve a card by its UID."""
