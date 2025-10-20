@@ -52,3 +52,8 @@ class NfcCardRepository(Repository):
             [<NfcCard uid='AB12CD34' user_id=1 ...>, <NfcCard uid='EF56GH78' user_id=1 ...>]
         """
         return self.db.query(self.model).filter(self.model.user_id == user_id).all()
+
+    def get_all_with_users(self) -> list[tuple[NfcCard, str]]:
+        """Fetch all NFC cards and join with the user to get the username."""
+        from app.models.User import User
+        return self.db.query(NfcCard, User.username).join(User, NfcCard.user_id == User.id).all()

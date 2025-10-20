@@ -5,7 +5,7 @@ from app.core.database import get_db
 from app.services.NfcCardService import NfcCardService
 from app.services.users.UserService import UserService
 from app.models.User import User
-from app.schemas.nfc_card import NfcCardCreate, NfcCardAssign, NfcCardRead
+from app.schemas.nfc_card import NfcCardCreate, NfcCardAssign, NfcCardRead, NfcCardWithUser
 from app.schemas.Response import Response
 from app.core.dependencies import get_current_admin, get_current_user
 from app.services.vaults.VaultMembershipService import VaultMembershipService
@@ -16,6 +16,19 @@ router = APIRouter(
     redirect_slashes=False  # <-- put it here
 )
 
+
+# -----------------------------
+# Get all NFC cards with usernames
+# -----------------------------
+@router.get("/users", response_model=List[NfcCardWithUser])
+def list_nfc_cards_with_users(db: Session = Depends(get_db), current_user = Depends(get_current_admin)):
+    """
+    Returns all NFC cards with their assigned usernames.
+    - Admin access is required.
+    """
+    service = NfcCardService(db)
+    cards_with_users = service.get_all_cards_with_users()
+    return [NfcCardWithUser(nfc_card_id=card.id, nfc_card_uid=card.uid, nfc_card_name=card.name, username=username) for card, username in cards_with_users]
 
 # -----------------------------
 # Create a new NFC card
@@ -37,7 +50,7 @@ def create_nfc_card(payload: NfcCardCreate, db: Session = Depends(get_db), curre
         )
 
     service = NfcCardService(db)
-    nfcCard = service.create_card(uid=payload.uid, user_id=payload.user_id)
+    nfcCard = service.create_card(uid=payload.uid, name=payload.name, user_id=payload.user_id)
     return Response(success=True, data=nfcCard, detail="NFC Card successfully created")
 
 # -----------------------------
