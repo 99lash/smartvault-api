@@ -53,6 +53,7 @@ class LogQueryService:
             log_dict = {
                 'id': log.id,
                 'device_id': log.device_id,
+                'vault_id': log.vault_id,
                 'user_id': log.user_id,
                 'event_type': log.event_type.value if hasattr(log.event_type, 'value') else log.event_type,
                 'details': log.details,

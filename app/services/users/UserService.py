@@ -218,23 +218,38 @@ class UserService:
             User object for the authenticated user
 
         Raises:
-            ValueError: If token is invalid or user not found
+            HTTPException(401): If token is invalid or expired
         """
-        credentials_exception = ValueError("Could not validate credentials")
+        # ADD THIS CHECK AT THE TOP
+        if not token or token.strip() == "":
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="No authentication token provided",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        
+        credentials_exception = HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
         try:
             payload = jose_jwt.decode(token, SECRET_KEY, algorithms=settings.ALLOWED_JWT_ALGORITHMS)
             username: str = payload.get("sub")
             if username is None:
                 raise credentials_exception
+            
         except JWTError as e:
             logging.error(f"JWT decode failed: {type(e).__name__}")
+            # Return 401 for any JWT errors including ExpiredSignatureError
             raise credentials_exception
 
         user = self.repo.get_by_username(username)
         if user is None:
             logging.warning(f"User not found for username '{username}'")
             raise credentials_exception
+        
         return user
     
 

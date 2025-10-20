@@ -7,6 +7,7 @@ from app.core.database import get_db
 from app.core.dependencies import get_current_user
 from app.services.vaults.VaultMembershipService import VaultMembershipService
 from app.models.User import User
+from app.models.Vault import Vault
 from app.models.VaultMembership import MembershipRole
 from app.schemas.Response import Response
 
@@ -25,6 +26,9 @@ class VaultMembershipResponse(BaseModel):
     id: int
     user_id: int
     vault_id: int
+    vault_name: str | None
+    vault_device_id: str | None
+    vault_location: str | None
     role: str
     created_at: str
     updated_at: str | None
@@ -66,13 +70,22 @@ def add_user_to_vault(
         role=role_enum
     )
 
+    # Fetch vault details for consistent response
+    vault = db.query(Vault).filter(Vault.id == membership.vault_id).first()
+
     response_data = VaultMembershipResponse(
         id=membership.id,
         user_id=membership.user_id,
         vault_id=membership.vault_id,
+        vault_name=vault.name if vault else None,
+        vault_device_id=vault.device_id if vault else None,
+        vault_location=vault.location if vault else None,
         role=membership.role.value,
         created_at=membership.created_at.isoformat(),
-        updated_at=membership.updated_at.isoformat() if membership.updated_at else None
+        updated_at=membership.updated_at.isoformat() if membership.updated_at else None,
+        username=current_user.username,
+        first_name=current_user.first_name,
+        last_name=current_user.last_name
     )
 
     return Response(success=True, data=response_data,
@@ -107,13 +120,22 @@ def update_user_role_in_vault(
     if not membership:
         raise HTTPException(status_code=404, detail="User is not a member of this vault")
 
+    # Fetch vault details for consistent response
+    vault = db.query(Vault).filter(Vault.id == membership.vault_id).first()
+
     response_data = VaultMembershipResponse(
         id=membership.id,
         user_id=membership.user_id,
         vault_id=membership.vault_id,
-        role=membership.role.value,  
+        vault_name=vault.name if vault else None,
+        vault_device_id=vault.device_id if vault else None,
+        vault_location=vault.location if vault else None,
+        role=membership.role.value,
         created_at=membership.created_at.isoformat(),
-        updated_at=membership.updated_at.isoformat() if membership.updated_at else None
+        updated_at=membership.updated_at.isoformat() if membership.updated_at else None,
+        username=current_user.username,
+        first_name=current_user.first_name,
+        last_name=current_user.last_name
     )
 
     return Response(success=True, data=response_data,
@@ -149,6 +171,8 @@ def get_vault_members(
         raise HTTPException(status_code=403, detail="Access denied to this vault")
 
     members = membership_service.get_vault_members(vault_id)
+    # Fetch vault details once for response enrichment
+    vault = db.query(Vault).filter(Vault.id == vault_id).first()
 
     response_data = []
     for member in members:
@@ -157,6 +181,9 @@ def get_vault_members(
             id=member.id,
             user_id=member.user_id,
             vault_id=member.vault_id,
+            vault_name=vault.name if vault else None,
+            vault_device_id=vault.device_id if vault else None,
+            vault_location=vault.location if vault else None,
             role=member.role.value,
             created_at=member.created_at.isoformat(),
             updated_at=member.updated_at.isoformat() if member.updated_at else None,
@@ -200,15 +227,23 @@ def get_current_user_vaults(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    from app.models.Vault import Vault
+
     membership_service = VaultMembershipService(db)
     user_memberships = membership_service.get_user_vaults(current_user.id)
 
     response_data = []
     for membership in user_memberships:
+        # Fetch vault details
+        vault = db.query(Vault).filter(Vault.id == membership.vault_id).first()
+
         response_data.append(VaultMembershipResponse(
             id=membership.id,
             user_id=membership.user_id,
             vault_id=membership.vault_id,
+            vault_name=vault.name if vault else None,
+            vault_device_id=vault.device_id if vault else None,
+            vault_location=vault.location if vault else None,
             role=membership.role.value,
             created_at=membership.created_at.isoformat(),
             updated_at=membership.updated_at.isoformat() if membership.updated_at else None,
