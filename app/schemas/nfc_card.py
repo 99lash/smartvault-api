@@ -50,4 +50,6 @@ class NfcCardWithUser(SQLModel, table=False):
     nfc_card_id: int
     nfc_card_uid: str
     nfc_card_name: Optional[str] = None
+    vault_id: int
+    user_id: Optional[int] = None
     username: str

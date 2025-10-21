@@ -30,7 +30,7 @@ def list_nfc_cards_with_users(db: Session = Depends(get_db), current_user = Depe
     """
     service = NfcCardService(db)
     cards_with_users = service.get_all_cards_with_users()
-    return [NfcCardWithUser(nfc_card_id=card.id, nfc_card_uid=card.uid, nfc_card_name=card.name, username=username) for card, username in cards_with_users]
+    return [NfcCardWithUser(nfc_card_id=card.id, nfc_card_uid=card.uid, nfc_card_name=card.name, vault_id=card.vault_id, user_id=card.user_id, username=username) for card, username in cards_with_users]
 
 # -----------------------------
 # Create a new NFC card
@@ -187,6 +187,8 @@ def get_cards_by_vault(vault_id: int, db: Session = Depends(get_db), current_use
             nfc_card_id=card.id,
             nfc_card_uid=card.uid,
             nfc_card_name=card.name,
+            vault_id=card.vault_id,
+            user_id=card.user_id,
             username=username or "Unassigned"  # Provide default if username is None
         ) 
         for card, username in cards_with_users
@@ -195,30 +197,86 @@ def get_cards_by_vault(vault_id: int, db: Session = Depends(get_db), current_use
 # Hard delete a NFC card (permanent deletion)
 # -----------------------------
 @router.delete("/{card_id}/hard", response_model=Response)
-def hard_delete_nfc_card(card_id: int, db: Session = Depends(get_db), current_user = Depends(get_current_admin)):
+def hard_delete_nfc_card(card_id: int, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
     """
     Permanently deletes an NFC card by ID.
     - WARNING: This action cannot be undone!
     - Raises 404 if not found.
+    - Requires vault admin access for the vault containing the NFC card.
     """
+    print(f"🔍 Delete attempt by user: {current_user.id} ({current_user.username}), system role: {current_user.role}")
+    
+    # Get the NFC card to find its vault
     service = NfcCardService(db)
+    nfc_card = service.get_card_by_id(card_id)
+    if not nfc_card:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="NFC card not found")
+    
+    print(f"🔍 NFC card found: ID={nfc_card.id}, UID={nfc_card.uid}, Vault ID={nfc_card.vault_id}")
+    
+    # Check if user is admin of the vault containing this NFC card
+    from app.services.vaults.VaultMembershipService import VaultMembershipService
+    from app.models.VaultMembership import MembershipRole
+    
+    membership_service = VaultMembershipService(db)
+    user_role_in_vault = membership_service.get_user_role_in_vault(current_user.id, nfc_card.vault_id)
+    
+    print(f"🔍 User role in vault {nfc_card.vault_id}: {user_role_in_vault}")
+    
+    if user_role_in_vault != MembershipRole.admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, 
+            detail=f"Vault admin access required. User role in vault: {user_role_in_vault}"
+        )
+    
+    # Proceed with deletion
     deleted = service.hard_delete_card(card_id)
     if not deleted:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="NFC card not found")
+    
+    print(f"✅ NFC card {card_id} permanently deleted by user {current_user.id}")
     return Response(success=True, detail=f"NFC card {card_id} permanently deleted")
 
 # -----------------------------
 # Soft delete a NFC card
 # -----------------------------
 @router.delete("/{card_id}", response_model=Response)
-def delete_nfc_card(card_id: int, db: Session = Depends(get_db), current_user = Depends(get_current_admin)):
+def delete_nfc_card(card_id: int, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
     """
     Deletes an NFC card by ID.
     - Soft deletes if the model has a deleted_at column.
     - Raises 404 if not found.
+    - Requires vault admin access for the vault containing the NFC card.
     """
+    print(f"🔍 Soft delete attempt by user: {current_user.id} ({current_user.username}), system role: {current_user.role}")
+    
+    # Get the NFC card to find its vault
     service = NfcCardService(db)
+    nfc_card = service.get_card_by_id(card_id)
+    if not nfc_card:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="NFC card not found")
+    
+    print(f"🔍 NFC card found: ID={nfc_card.id}, UID={nfc_card.uid}, Vault ID={nfc_card.vault_id}")
+    
+    # Check if user is admin of the vault containing this NFC card
+    from app.services.vaults.VaultMembershipService import VaultMembershipService
+    from app.models.VaultMembership import MembershipRole
+    
+    membership_service = VaultMembershipService(db)
+    user_role_in_vault = membership_service.get_user_role_in_vault(current_user.id, nfc_card.vault_id)
+    
+    print(f"🔍 User role in vault {nfc_card.vault_id}: {user_role_in_vault}")
+    
+    if user_role_in_vault != MembershipRole.admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, 
+            detail=f"Vault admin access required. User role in vault: {user_role_in_vault}"
+        )
+    
+    # Proceed with deletion
     card = service.delete_card(card_id)
     if not card:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="NFC card not found")
+    
+    print(f"✅ NFC card {card_id} soft deleted by user {current_user.id}")
     return Response(success=True, detail=f"NFC card {card_id} deleted successfully")

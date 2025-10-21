@@ -25,6 +25,7 @@ class LogResponse(BaseModel):
     # vault_id: int
     device_id: str
     user_id: Optional[int] = None
+    username: Optional[str] = None  # Added username field
     event_type: str
     details: str
     timestamp: datetime

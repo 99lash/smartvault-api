@@ -170,10 +170,11 @@ class LogRepository(Repository):
         device_id: str, 
         prefixes: List[str], 
         limit: Optional[int] = None,
-        offset: Optional[int] = None  # ✅ Added offset parameter
+        offset: Optional[int] = None
     ) -> List[Log]:
         """
         Get logs for a device filtered by details prefixes (starts with any prefix).
+        Includes user relationship for username access.
 
         Args:
             device_id (str): Device ID to filter by.
@@ -182,16 +183,18 @@ class LogRepository(Repository):
             offset (Optional[int]): Number of logs to skip (default: 0).
 
         Returns:
-            List[Log]: Matching logs ordered by timestamp descending.
+            List[Log]: Matching logs with user relationship loaded, ordered by timestamp descending.
         """
         if not prefixes:
             return []
 
         like_filters = [self.model.details.like(f"{prefix}%") for prefix in prefixes]
 
-        # Build the base query
+        # Build the base query with user relationship
+        from sqlalchemy.orm import joinedload
         query = (
             self.db.query(self.model)
+            .options(joinedload(self.model.user))  # Eager load user relationship
             .filter(
                 self.model.device_id == device_id,
                 or_(*like_filters)

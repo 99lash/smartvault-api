@@ -51,6 +51,10 @@ class NfcCardService:
         """Retrieve a card by its UID."""
         return self.repo.get_by_uid(uid)
 
+    def get_card_by_id(self, card_id: int) -> Optional[NfcCard]:
+        """Retrieve a card by its ID."""
+        return self.repo.get_by_id(card_id)
+
     def get_cards_by_user(self, user_id: int) -> List[NfcCard]:
         """Retrieve all cards assigned to a specific user."""
         return self.repo.get_by_user(user_id)

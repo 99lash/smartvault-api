@@ -25,12 +25,13 @@ class LogQueryService:
         device_id: str, 
         prefixes: List[str], 
         limit: Optional[int] = None,
-        offset: Optional[int] = None  # ✅ ADD THIS - this was missing!
+        offset: Optional[int] = None
     ) -> List[dict]:
         """
         Retrieve logs for a specific device filtered by details prefixes.
 
         Only includes rows where details starts with any of the provided prefixes.
+        Includes username information for better user identification.
 
         Args:
             device_id (str): The device ID to filter logs by.
@@ -39,22 +40,26 @@ class LogQueryService:
             offset (Optional[int]): Number of logs to skip (default: 0).
 
         Returns:
-            List[dict]: List of serialized log dictionaries, ordered by timestamp descending.
+            List[dict]: List of serialized log dictionaries with username, ordered by timestamp descending.
         """
         if not prefixes:
             return []
 
-        # ✅ Pass offset to repository
+        # Get logs with user relationship loaded
         logs = self.repo.get_filtered_logs_by_device(device_id, prefixes, limit, offset)
 
-        # Serialize logs to dictionaries
+        # Serialize logs to dictionaries with username
         serialized_logs = []
         for log in logs:
+            # Determine username with proper fallback logic
+            username = self._get_username_for_log(log)
+            
             log_dict = {
                 'id': log.id,
                 'device_id': log.device_id,
                 'vault_id': log.vault_id,
                 'user_id': log.user_id,
+                'username': username,
                 'event_type': log.event_type.value if hasattr(log.event_type, 'value') else log.event_type,
                 'details': log.details,
                 'timestamp': log.created_at.isoformat() + 'Z' if log.created_at else None
@@ -62,3 +67,24 @@ class LogQueryService:
             serialized_logs.append(log_dict)
 
         return serialized_logs
+
+    def _get_username_for_log(self, log) -> str:
+        """
+        Extract username from log with proper fallback logic.
+        
+        Args:
+            log: Log object with potential user relationship
+            
+        Returns:
+            str: Username or appropriate fallback
+        """
+        # Check if user relationship is loaded and user exists
+        if hasattr(log, 'user') and log.user:
+            return log.user.username or f"User {log.user_id}"
+        
+        # Fallback for system events (no user_id)
+        if not log.user_id:
+            return "System"
+        
+        # Fallback for missing user relationship
+        return f"User {log.user_id}"

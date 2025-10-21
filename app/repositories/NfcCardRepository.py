@@ -36,6 +36,22 @@ class NfcCardRepository(Repository):
         """
         return self.db.query(self.model).filter(self.model.uid == uid).first()
 
+    def get_by_id(self, card_id: int) -> NfcCard | None:
+        """
+        Fetch a single NFC card by its ID.
+
+        Args:
+            card_id (int): ID of the NFC card.
+
+        Returns:
+            NfcCard | None: Returns the NfcCard object if found, else None.
+
+        Example: 
+            >>> repo.get_by_id(1)
+            <NfcCard id=1 uid='AB12CD34' user_id=1 ...>
+        """
+        return self.db.query(self.model).filter(self.model.id == card_id).first()
+
     def get_by_user(self, user_id: int) -> list[NfcCard]:
         """
         Fetch all NFC cards associated with a specific user.
