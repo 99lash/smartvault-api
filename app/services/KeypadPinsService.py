@@ -83,6 +83,33 @@ class KeypadPinsService:
     def get_vault_pins(self, vault_id: int) -> list[KeypadPins]:
         """Get all pins for a specific vault"""
         return self.repo.get_by_vault_id(vault_id)
+    
+    def get_vault_pins_with_authorization(self, vault_id: int, user_id: int, is_admin: bool) -> list[KeypadPins]:
+        """
+        Get vault pins with role-based authorization.
+        
+        Args:
+            vault_id (int): ID of the vault
+            user_id (int): ID of the requesting user
+            is_admin (bool): Whether the user is an admin of the vault
+            
+        Returns:
+            list[KeypadPins]: Filtered pins based on user role
+        """
+        return self.repo.get_by_vault_and_role_filter(vault_id, user_id, is_admin)
+    
+    def get_user_pins_in_vault(self, user_id: int, vault_id: int) -> list[KeypadPins]:
+        """
+        Get all pins for a specific user in a specific vault.
+        
+        Args:
+            user_id (int): ID of the user
+            vault_id (int): ID of the vault
+            
+        Returns:
+            list[KeypadPins]: User's pins in the vault
+        """
+        return self.repo.get_by_user_and_vault(user_id, vault_id)
 
     # Hard delete a keypad pin (permanent deletion)
     def hard_delete_pin(self, pin_id: int) -> bool:

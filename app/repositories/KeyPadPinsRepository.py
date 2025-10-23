@@ -32,6 +32,32 @@ class KeypadPinsRepository(Repository):
     def get_by_vault_id(self, vault_id: int):
         """Fetch all keypad pins for a specific vault"""
         return self.db.query(self.model).filter(self.model.vault_id == vault_id).all()
+    
+    def get_by_user_and_vault(self, user_id: int, vault_id: int):
+        """Fetch all keypad pins for a specific user in a specific vault"""
+        return self.db.query(self.model).filter(
+            self.model.user_id == user_id,
+            self.model.vault_id == vault_id
+        ).all()
+    
+    def get_by_vault_and_role_filter(self, vault_id: int, user_id: int, is_admin: bool):
+        """
+        Fetch keypad pins for a vault with role-based filtering.
+        
+        Args:
+            vault_id (int): ID of the vault
+            user_id (int): ID of the requesting user
+            is_admin (bool): Whether the user is an admin of the vault
+            
+        Returns:
+            List[KeypadPins]: Filtered pins based on user role
+        """
+        if is_admin:
+            # Admins can see all pins in the vault
+            return self.get_by_vault_id(vault_id)
+        else:
+            # Members can only see their own pins in the vault
+            return self.get_by_user_and_vault(user_id, vault_id)
 
     def hard_delete(self, pin_id: int) -> bool:
         """

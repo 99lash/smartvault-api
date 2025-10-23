@@ -4,6 +4,7 @@ from app.core.database import get_db
 from app.services.KeypadPinsService import KeypadPinsService
 from app.services.vaults.VaultMembershipService import VaultMembershipService
 from app.services.VaultAccessControlService import VaultAccessControlService
+from app.services.PinAccessControlService import PinAccessControlService
 from app.schemas.Response import Response
 from app.schemas.keypad_pin import KeypadPinCreate, KeypadPinAssign, KeypadPinRead
 from app.services.users.UserService import UserService
@@ -105,81 +106,48 @@ def list_keypad_pins(
     db: Session = Depends(get_db),
     current_user = Depends(get_current_user)
 ):
-
     """
-    Returns keypad pins with optional filtering.
+    Returns keypad pins with optional filtering and proper authorization.
 
     Query Parameters:
     - user_id: Filter pins by specific user ID (mutually exclusive with vault_id)
     - vault_id: Filter pins by vault ID (mutually exclusive with user_id)
 
+    Authorization:
+    - Users can only view their own pins unless they're admin of the vault
+    - Admins can view all pins in vaults they manage
+    - Guests cannot view any pins
+
     Note: Provide either user_id OR vault_id, but not both.
-    If no filters are provided, returns all pins.
+    If no filters are provided, returns user's own pins.
     """
-    # Manual validation for parameter constraints
-    if user_id is not None and user_id < 1:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="user_id must be greater than 0"
+    try:
+        # Input validation
+        _validate_pin_listing_parameters(user_id, vault_id)
+        
+        # Initialize services
+        pin_access_control = PinAccessControlService(db)
+        user_service = UserService(db)
+        
+        # Get authorized pins based on filters and user permissions
+        pins = pin_access_control.get_authorized_pins_for_user(
+            user_id=current_user.id,
+            vault_id=vault_id,
+            target_user_id=user_id
         )
-
-    if vault_id is not None and vault_id < 1:
+        
+        # Enhance pins with user information for better UI display
+        enhanced_pins = _enhance_pins_with_user_info(pins, user_service)
+        
+        return enhanced_pins
+        
+    except HTTPException:
+        raise  # Re-raise HTTP exceptions as-is
+    except Exception as e:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="vault_id must be greater than 0"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"An unexpected error occurred while fetching PINs: {str(e)}"
         )
-
-    # Validate that only one filter is provided
-    if user_id is not None and vault_id is not None:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Provide either user_id or vault_id, but not both"
-        )
-
-    service = KeypadPinsService(db)
-
-    # Apply filters based on provided parameters
-    if user_id is not None:
-        pins = service.get_user_pins(user_id)
-    elif vault_id is not None:
-        pins = service.get_vault_pins(vault_id)
-    else:
-        pins = service.list_keypad_pins()
-
-    # Enhance pins with user information for better UI display
-    enhanced_pins = []
-    user_service = UserService(db)  # Initialize UserService
-
-    for pin in pins:
-        pin_dict = pin.__dict__.copy()
-
-        # If PIN has a user_id, fetch user details
-        if pin.user_id:
-            user = user_service.get_user_by_id(pin.user_id)
-            if user:
-                pin_dict.update({
-                    'username': user.username,
-                    'first_name': user.first_name,
-                    'last_name': user.last_name
-                })
-            else:
-                # User not found, provide null values
-                pin_dict.update({
-                    'username': None,
-                    'first_name': None,
-                    'last_name': None
-                })
-        else:
-            # No user assigned to PIN
-            pin_dict.update({
-                'username': None,
-                'first_name': None,
-                'last_name': None
-            })
-
-        enhanced_pins.append(pin_dict)
-
-    return enhanced_pins
 
 
 # -----------------------------
@@ -435,3 +403,92 @@ def delete_keypad_pin(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"An unexpected error occurred while deleting PIN: {str(e)}"
         )
+
+
+# -----------------------------
+# Helper Functions
+# -----------------------------
+
+def _validate_pin_listing_parameters(user_id: int | None, vault_id: int | None) -> None:
+    """
+    Validate parameters for PIN listing endpoint.
+    
+    Args:
+        user_id: User ID parameter
+        vault_id: Vault ID parameter
+        
+    Raises:
+        HTTPException: If parameters are invalid
+    """
+    # Validate user_id parameter
+    if user_id is not None and user_id < 1:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="user_id must be greater than 0"
+        )
+
+    # Validate vault_id parameter
+    if vault_id is not None and vault_id < 1:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="vault_id must be greater than 0"
+        )
+
+    # Validate mutual exclusivity
+    if user_id is not None and vault_id is not None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Provide either user_id or vault_id, but not both"
+        )
+
+
+def _enhance_pins_with_user_info(pins: list, user_service: UserService) -> list[dict]:
+    """
+    Enhance PIN objects with user information for better UI display.
+    
+    Args:
+        pins: List of PIN objects
+        user_service: UserService instance
+        
+    Returns:
+        List of enhanced PIN dictionaries
+    """
+    enhanced_pins = []
+    
+    for pin in pins:
+        pin_dict = pin.__dict__.copy()
+        
+        # Add user information if PIN is assigned to a user
+        if pin.user_id:
+            try:
+                user = user_service.get_user_by_id(pin.user_id)
+                if user:
+                    pin_dict.update({
+                        'username': user.username,
+                        'first_name': user.first_name,
+                        'last_name': user.last_name
+                    })
+                else:
+                    pin_dict.update({
+                        'username': None,
+                        'first_name': None,
+                        'last_name': None
+                    })
+            except Exception:
+                # If user lookup fails, set null values
+                pin_dict.update({
+                    'username': None,
+                    'first_name': None,
+                    'last_name': None
+                })
+        else:
+            # No user assigned to PIN
+            pin_dict.update({
+                'username': None,
+                'first_name': None,
+                'last_name': None
+            })
+        
+        enhanced_pins.append(pin_dict)
+    
+    return enhanced_pins
