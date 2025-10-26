@@ -88,6 +88,60 @@ class NfcCardService:
         """Retrieve all NFC cards for a vault with their assigned usernames."""
         return self.repo.get_by_vault_with_users(vault_id)
 
+    def enhance_cards_with_user_info(self, cards: List[NfcCard], db: Session) -> List[dict]:
+        """
+        Enhance NFC card objects with user information for display.
+
+        Args:
+            cards: List of NFC card objects
+            db: Database session
+
+        Returns:
+            List of enhanced card dictionaries with user details
+        """
+        from app.services.users.UserService import UserService
+
+        enhanced_cards = []
+        user_service = UserService(db)
+
+        for card in cards:
+            card_dict = card.__dict__.copy()
+
+            # Add user information if card is assigned to a user
+            if card.user_id:
+                try:
+                    user = user_service.get_user_by_id(card.user_id)
+                    if user:
+                        card_dict.update({
+                            'username': user.username,
+                            'first_name': user.first_name,
+                            'last_name': user.last_name
+                        })
+                    else:
+                        card_dict.update({
+                            'username': None,
+                            'first_name': None,
+                            'last_name': None
+                        })
+                except Exception:
+                    # If user lookup fails, set null values
+                    card_dict.update({
+                        'username': None,
+                        'first_name': None,
+                        'last_name': None
+                    })
+            else:
+                # No user assigned to card
+                card_dict.update({
+                    'username': None,
+                    'first_name': None,
+                    'last_name': None
+                })
+
+            enhanced_cards.append(card_dict)
+
+        return enhanced_cards
+
     def hard_delete_card(self, card_id: int) -> bool:
         """Permanently delete an NFC card from the database."""
         return self.repo.hard_delete(card_id)
