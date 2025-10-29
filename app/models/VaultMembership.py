@@ -142,7 +142,7 @@ class VaultMembership(SQLModel, table=True):
     # AUDIT TIMESTAMPS
     # -------------------------------------------------------------------------
     created_at: datetime = Field(
-        default_factory=datetime.utcnow,
+        default_factory=datetime.now,  # Use local time instead of UTC
         nullable=False,
     )
 
@@ -222,7 +222,7 @@ def set_updated_at(mapper, connection, target):
     ---------------
     Provides accurate audit trail for compliance and debugging.
     """
-    target.updated_at = datetime.utcnow()
+    target.updated_at = datetime.now()  # Use local time instead of UTC
 
 
 @event.listens_for(VaultMembership, "before_insert", propagate=True)
@@ -244,7 +244,7 @@ def set_created_updated_at(mapper, connection, target):
     ------------
     Ensures both timestamps are identical at creation time.
     """
-    now = datetime.utcnow()
+    now = datetime.now()  # Use local time instead of UTC
     if not target.created_at:
         target.created_at = now
     target.updated_at = now

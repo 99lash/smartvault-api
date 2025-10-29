@@ -36,6 +36,7 @@ class VaultMembershipResponse(BaseModel):
     username: str | None
     first_name: str | None
     last_name: str | None
+    last_access: str | None = None  # Timestamp of user's last successful access to this vault
 
 # -----------------------------
 # Router
@@ -236,21 +237,22 @@ def get_current_user_vaults(
     response_data = []
     for membership in user_memberships:
         # Fetch vault details
-        vault = db.query(Vault).filter(Vault.id == membership.vault_id).first()
+        vault = db.query(Vault).filter(Vault.id == membership['vault_id']).first()
 
         response_data.append(VaultMembershipResponse(
-            id=membership.id,
-            user_id=membership.user_id,
-            vault_id=membership.vault_id,
+            id=membership['id'],
+            user_id=membership['user_id'],
+            vault_id=membership['vault_id'],
             vault_name=vault.name if vault else None,
             vault_device_id=vault.device_id if vault else None,
             vault_location=vault.location if vault else None,
-            role=membership.role.value,
-            created_at=membership.created_at.isoformat(),
-            updated_at=membership.updated_at.isoformat() if membership.updated_at else None,
+            role=membership['role'].value,
+            created_at=membership['created_at'].isoformat(),
+            updated_at=membership['updated_at'].isoformat() if membership['updated_at'] else None,
             username=current_user.username,
             first_name=current_user.first_name,
-            last_name=current_user.last_name
+            last_name=current_user.last_name,
+            last_access=membership['last_access'].isoformat() + 'Z' if membership['last_access'] else None
         ))
 
     return Response(success=True, data=response_data)

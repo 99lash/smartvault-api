@@ -51,8 +51,30 @@ class VaultMembershipService:
     # MEMBERSHIP QUERIES
     # -------------------------------------------------------------------------
 
-    def get_user_vaults(self, user_id: int) -> List[VaultMembership]:
-        return self.repo.get_user_memberships(user_id)
+    def get_user_vaults(self, user_id: int) -> List[dict]:
+        from app.services.logs.AccessTrackingService import AccessTrackingService
+
+        memberships = self.repo.get_user_memberships(user_id)
+        access_tracking = AccessTrackingService(self.db)
+
+        result = []
+        for membership in memberships:
+            # Convert to dict and add last_access
+            membership_dict = {
+                'id': membership.id,
+                'user_id': membership.user_id,
+                'vault_id': membership.vault_id,
+                'role': membership.role,
+                'created_at': membership.created_at,
+                'updated_at': membership.updated_at,
+                'last_access': access_tracking.get_last_access_timestamp(
+                    user_id=user_id,
+                    vault_id=membership.vault_id
+                )
+            }
+            result.append(membership_dict)
+
+        return result
 
     def get_user_role_in_vault(self, user_id: int, vault_id: int) -> Optional[MembershipRole]:
         membership = self.repo.get_by_user_and_vault(user_id, vault_id)

@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, status
 from typing import List, Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 from app.schemas.log import LogCreate, LogRead, LogVaultSummaryRead, LogUserSummaryRead, LogVaultAttackRead, LogVaultSuspiciousRead, LogActivityReportRead, LogStatsRead
 from app.schemas.LogSchemas import WSQueryRequest, LogResponse
 from sqlalchemy.orm import Session
@@ -16,6 +16,7 @@ from pydantic import BaseModel
 from app.services.vaults.VaultService import VaultService
 from app.services.users.UserService import UserService
 from app.services.logs.VaultAccessControllerService import VaultAccessController
+from app.services.logs.AccessTrackingService import AccessTrackingService
 from app.repositories.VaultMembershipRepository import VaultMembershipRepository
 from app.repositories.VaultMembershipRepository import VaultMembershipRepository
 from app.core.dependencies import get_current_user, get_current_admin
@@ -215,20 +216,191 @@ async def websocket_logs(websocket: WebSocket):
         if handler:
             await handler.cleanup()
 
-@router.websocket("/ws/query") 
+
+# -----------------------------
+# Access Analytics Endpoints
+# -----------------------------
+
+@router.get("/access/failed-attempts", response_model=Response[List[dict]])
+def get_failed_access_attempts(
+    vault_id: Optional[int] = None,
+    user_id: Optional[int] = None,
+    limit: int = 100,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Get failed access attempts for security monitoring.
+
+    Query Parameters:
+    - vault_id: Filter by specific vault (optional)
+    - user_id: Filter by specific user (optional)
+    - limit: Maximum number of results (default: 100, max: 1000)
+
+    Returns:
+        List of failed access attempts with details
+    """
+    # Validate access permissions
+    if vault_id:
+        vault_membership_repo = VaultMembershipRepository(db)
+        controller = VaultAccessController(vault_membership_repo)
+        if not controller.check_access(current_user.id, vault_id):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="No access to this vault"
+            )
+
+    # Limit the results for performance
+    if limit > 1000:
+        limit = 1000
+
+    try:
+        access_service = AccessTrackingService(db)
+        failed_attempts = access_service.get_failed_access_attempts(
+            vault_id=vault_id,
+            user_id=user_id,
+            limit=limit
+        )
+
+        return Response(
+            success=True,
+            data=failed_attempts,
+            detail=f"Retrieved {len(failed_attempts)} failed access attempts"
+        )
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to retrieve failed access attempts: {str(e)}"
+        )
+
+
+@router.get("/access/summary", response_model=Response[dict])
+def get_access_summary(
+    vault_id: Optional[int] = None,
+    user_id: Optional[int] = None,
+    days: int = 7,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Get comprehensive access summary including successful and failed attempts.
+
+    Query Parameters:
+    - vault_id: Filter by specific vault (optional)
+    - user_id: Filter by specific user (optional)
+    - days: Number of days to look back (default: 7, max: 90)
+
+    Returns:
+        Comprehensive access summary with trends and statistics
+    """
+    # Validate access permissions
+    if vault_id:
+        vault_membership_repo = VaultMembershipRepository(db)
+        controller = VaultAccessController(vault_membership_repo)
+        if not controller.check_access(current_user.id, vault_id):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="No access to this vault"
+            )
+
+    # Limit the date range for performance
+    if days > 90:
+        days = 90
+
+    try:
+        # Calculate date range
+        end_date = datetime.now()  # Use local time instead of UTC
+        start_date = end_date - timedelta(days=days)
+
+        access_service = AccessTrackingService(db)
+        summary = access_service.get_access_summary(
+            vault_id=vault_id,
+            user_id=user_id,
+            start_date=start_date,
+            end_date=end_date,
+            days=days
+        )
+
+        return Response(
+            success=True,
+            data=summary,
+            detail=f"Access summary for the last {days} days"
+        )
+
+    except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to retrieve access summary: {str(e)}\n{error_details}"
+        )
+
+@router.get("/access/recent-activity", response_model=Response[List[dict]])
+def get_recent_activity(
+    vault_id: Optional[int] = None,
+    limit: int = 10,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Get recent activity for the activity feed, including both successful unlocks and failed attempts.
+
+    Query Parameters:
+    - vault_id: Filter by specific vault (optional)
+    - limit: Maximum number of activities to return (default: 10, max: 50)
+
+    Returns:
+        List of recent activities with details for the activity feed
+    """
+    # Validate access permissions
+    if vault_id:
+        vault_membership_repo = VaultMembershipRepository(db)
+        controller = VaultAccessController(vault_membership_repo)
+        if not controller.check_access(current_user.id, vault_id):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="No access to this vault"
+            )
+
+    # Limit the results for performance
+    if limit > 50:
+        limit = 50
+
+    try:
+        access_service = AccessTrackingService(db)
+        activities = access_service.get_recent_activity(
+            vault_id=vault_id,
+            limit=limit
+        )
+
+        return Response(
+            success=True,
+            data=activities,
+            detail=f"Retrieved {len(activities)} recent activities"
+        )
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to retrieve recent activity: {str(e)}"
+        )
+
+
+@router.websocket("/ws/query")
 async def websocket_query_logs(websocket: WebSocket):
     """
     WebSocket endpoint for querying filtered logs.
-    
+
     On connection, expects a JSON payload with vault_id and prefixes.
     Responds with the filtered logs as a JSON array.
     Handles errors and disconnections gracefully.
-    
+
     Args:
         websocket (WebSocket): Connected client requesting logs.
     """
     handler = None
-    
+
     try:
         handler = QueryWebSocketHandler(websocket)
         await handler.handle_connection()

@@ -19,6 +19,7 @@ class LogEventType(str, enum.Enum):
     need_other_factor = "need_other_factor"
     access_granted = "access_granted"
     connected = "connected"
+    unlock_confirm = "unlock_confirm"
     
 
 # Log model

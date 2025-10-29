@@ -113,7 +113,7 @@ class LogService:
                     # If not a valid enum, try as string match in details
                     filters.append(self.repo.model.details.contains(event_type))
             if older_than_days is not None:
-                cutoff_date = datetime.utcnow() - timedelta(days=older_than_days)
+                cutoff_date = datetime.now() - timedelta(days=older_than_days)  # Use local time
                 filters.append(self.repo.model.created_at < cutoff_date)
 
         # Execute bulk delete
@@ -184,7 +184,7 @@ class LogService:
             event_type=LogEventType.failed_attempt,
             details=details,
             vault_id=vault_id,
-            timestamp=datetime.utcnow()
+            timestamp=datetime.now()  # Use local time
         )
     
     def log_tamper_detection(self, device_id: str, sensor_data: str = "") -> Log:
@@ -256,7 +256,7 @@ class LogService:
             event_type=event_type,
             details=details,
             vault_id=vault_id,
-            timestamp=datetime.utcnow()
+            timestamp=datetime.now()  # Use local time
         )
 
     def validate_access_and_create_log(self, device_id: str, details: str) -> Log | None:
@@ -312,7 +312,7 @@ class LogService:
                 event_type=LogEventType.tamper,
                 details=method_used,
                 vault_id=vault_id,
-                timestamp=datetime.utcnow()
+                timestamp=datetime.now()  # Use local time
             )
 
         # Successful authentication and authorization
