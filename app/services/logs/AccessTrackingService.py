@@ -16,17 +16,26 @@ import logging
 from datetime import datetime, timedelta, date
 from typing import Dict, List, Optional, Tuple, Any
 from sqlalchemy.orm import Session
-from sqlalchemy import func, and_, or_
-from fastapi import HTTPException, status
+from sqlalchemy import func, and_
 from app.models.Log import Log, LogEventType
 from app.repositories.LogRepository import LogRepository
 from app.services.logs.LogQueryService import LogQueryService
 
 
+# Constants
+DEFAULT_CACHE_TTL_MINUTES = 5
+DEFAULT_TREND_DAYS = 7
+DEFAULT_HOURLY_PATTERN_DAYS = 7
+DEFAULT_RECENT_ACTIVITY_DAYS = 7
+DEFAULT_RECENT_ACTIVITY_LIMIT = 10
+DEFAULT_FAILED_ATTEMPTS_LIMIT = 100
+HIGH_FAILED_ATTEMPTS_LIMIT = 1000
+
+
 class SimpleCache:
     """Simple in-memory cache with TTL for access statistics."""
 
-    def __init__(self, ttl_minutes: int = 5):
+    def __init__(self, ttl_minutes: int = DEFAULT_CACHE_TTL_MINUTES):
         self.cache: Dict[str, Tuple[Any, datetime]] = {}
         self.ttl_minutes = ttl_minutes
 
@@ -34,7 +43,7 @@ class SimpleCache:
         """Get value from cache if not expired."""
         if key in self.cache:
             value, timestamp = self.cache[key]
-            if datetime.utcnow() - timestamp < timedelta(minutes=self.ttl_minutes):
+            if datetime.now() - timestamp < timedelta(minutes=self.ttl_minutes):
                 logging.getLogger(__name__).debug(f"Cache hit for key: {key}")
                 return value
             else:
@@ -47,7 +56,7 @@ class SimpleCache:
     def set(self, key: str, value: Any) -> None:
         """Set value in cache with current timestamp."""
         logging.getLogger(__name__).debug(f"Setting cache for key: {key}")
-        self.cache[key] = (value, datetime.utcnow())
+        self.cache[key] = (value, datetime.now())
 
     def clear(self) -> None:
         """Clear all cached values."""
@@ -73,7 +82,7 @@ class AccessTrackingService:
         self.repo = LogRepository(db)
         self.query_service = LogQueryService(db)
         self.logger = logging.getLogger(__name__)
-        self.cache = SimpleCache(ttl_minutes=5)  # 5-minute cache for statistics
+        self.cache = SimpleCache(ttl_minutes=DEFAULT_CACHE_TTL_MINUTES)
 
         # Define access event types for consistent filtering
         self.SUCCESS_EVENTS = [LogEventType.unlock, LogEventType.access_granted]
@@ -117,6 +126,79 @@ class AccessTrackingService:
                 key_parts.append(f"{k}:{v}")
         return "|".join(key_parts)
 
+    def _build_query_filters(
+        self,
+        vault_id: Optional[int] = None,
+        user_id: Optional[int] = None,
+        device_id: Optional[str] = None,
+        start_date: Optional[datetime] = None,
+        end_date: Optional[datetime] = None,
+        event_types: Optional[List[LogEventType]] = None
+    ) -> List:
+        """
+        Build query filters for log queries.
+        
+        Args:
+            vault_id: Optional vault ID filter
+            user_id: Optional user ID filter
+            device_id: Optional device ID filter
+            start_date: Optional start date filter
+            end_date: Optional end date filter
+            event_types: Optional list of event types to filter
+            
+        Returns:
+            List of SQLAlchemy filter expressions
+        """
+        filters = []
+        
+        if event_types:
+            filters.append(Log.event_type.in_(event_types))
+        
+        if vault_id:
+            filters.append(Log.vault_id == vault_id)
+        if user_id:
+            filters.append(Log.user_id == user_id)
+        if device_id:
+            filters.append(Log.device_id == device_id)
+        if start_date:
+            filters.append(Log.created_at >= start_date)
+        if end_date:
+            filters.append(Log.created_at <= end_date)
+            
+        return filters
+
+    def _get_event_types(self, include_failed: bool = False) -> List[LogEventType]:
+        """Get event types based on whether to include failed attempts."""
+        event_types = self.SUCCESS_EVENTS.copy()
+        if include_failed:
+            event_types.extend(self.FAILED_EVENTS)
+        return event_types
+
+    def _extract_username(self, log: Log) -> str:
+        """
+        Extract username from a log entry.
+        
+        Args:
+            log: Log entry
+            
+        Returns:
+            Username string
+        """
+        if log.user and log.user.username:
+            return log.user.username
+        elif log.user_id:
+            return f'User {log.user_id}'
+        return 'Unknown User'
+
+    def _get_current_time(self) -> datetime:
+        """
+        Get current time using local timezone for consistency.
+        
+        Returns:
+            Current datetime in local timezone
+        """
+        return datetime.now()
+
     def get_access_count_by_user(
         self,
         user_id: Optional[int] = None,
@@ -157,24 +239,15 @@ class AccessTrackingService:
 
             self.logger.debug(f"Cache miss for user access counts: {cache_key}")
 
-            self.logger.debug(f"Getting access count by user with filters: user_id={user_id}, vault_id={vault_id}, include_failed={include_failed}")
-
-            # Determine which event types to include
-            event_types = self.SUCCESS_EVENTS.copy()
-            if include_failed:
-                event_types.extend(self.FAILED_EVENTS)
-
-            # Build query filters
-            filters = [Log.event_type.in_(event_types)]
-
-            if user_id:
-                filters.append(Log.user_id == user_id)
-            if vault_id:
-                filters.append(Log.vault_id == vault_id)
-            if start_date:
-                filters.append(Log.created_at >= start_date)
-            if end_date:
-                filters.append(Log.created_at <= end_date)
+            # Build filters
+            event_types = self._get_event_types(include_failed)
+            filters = self._build_query_filters(
+                user_id=user_id,
+                vault_id=vault_id,
+                start_date=start_date,
+                end_date=end_date,
+                event_types=event_types
+            )
 
             # Execute query
             if user_id:
@@ -196,15 +269,11 @@ class AccessTrackingService:
 
             # Cache the result
             self.cache.set(cache_key, result)
-            self.logger.debug(f"Cached result for user access counts: {cache_key}")
             return result
 
         except Exception as e:
             self.logger.error(f"Error getting access count by user: {str(e)}")
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Failed to retrieve user access counts: {str(e)}"
-            )
+            raise
 
     def get_access_count_by_vault(
         self,
@@ -226,21 +295,13 @@ class AccessTrackingService:
             Dict[str, int]: Dictionary with vault_id as key and access count as value
         """
         try:
-            # Define access event types
-            success_events = [LogEventType.unlock, LogEventType.access_granted]
-            failed_events = [LogEventType.failed_attempt] if include_failed else []
-
-            event_types = success_events + failed_events
-
-            # Build query filters
-            filters = [Log.event_type.in_(event_types)]
-
-            if vault_id:
-                filters.append(Log.vault_id == vault_id)
-            if start_date:
-                filters.append(Log.created_at >= start_date)
-            if end_date:
-                filters.append(Log.created_at <= end_date)
+            event_types = self._get_event_types(include_failed)
+            filters = self._build_query_filters(
+                vault_id=vault_id,
+                start_date=start_date,
+                end_date=end_date,
+                event_types=event_types
+            )
 
             # Execute query
             if vault_id:
@@ -282,21 +343,13 @@ class AccessTrackingService:
             Dict[str, int]: Dictionary with device_id as key and access count as value
         """
         try:
-            # Define access event types
-            success_events = [LogEventType.unlock, LogEventType.access_granted]
-            failed_events = [LogEventType.failed_attempt] if include_failed else []
-
-            event_types = success_events + failed_events
-
-            # Build query filters
-            filters = [Log.event_type.in_(event_types)]
-
-            if device_id:
-                filters.append(Log.device_id == device_id)
-            if start_date:
-                filters.append(Log.created_at >= start_date)
-            if end_date:
-                filters.append(Log.created_at <= end_date)
+            event_types = self._get_event_types(include_failed)
+            filters = self._build_query_filters(
+                device_id=device_id,
+                start_date=start_date,
+                end_date=end_date,
+                event_types=event_types
+            )
 
             # Execute query
             if device_id:
@@ -323,7 +376,7 @@ class AccessTrackingService:
         vault_id: Optional[int] = None,
         user_id: Optional[int] = None,
         days: int = 30
-    ) -> Dict[datetime, int]:
+    ) -> Dict[str, int]:
         """
         Get daily access trends for the last N days.
 
@@ -333,24 +386,18 @@ class AccessTrackingService:
             days (int): Number of days to look back
 
         Returns:
-            Dict[datetime, int]: Dictionary with date as key and access count as value
+            Dict[str, int]: Dictionary with ISO date string as key and access count as value
         """
         try:
-            start_date = datetime.utcnow() - timedelta(days=days)
+            # Use local time for consistency with log creation
+            start_date = self._get_current_time() - timedelta(days=days)
 
-            # Define access event types (only successful accesses for trends)
-            event_types = [LogEventType.unlock, LogEventType.access_granted]
-
-            # Build query filters
-            filters = [
-                Log.event_type.in_(event_types),
-                Log.created_at >= start_date
-            ]
-
-            if vault_id:
-                filters.append(Log.vault_id == vault_id)
-            if user_id:
-                filters.append(Log.user_id == user_id)
+            filters = self._build_query_filters(
+                vault_id=vault_id,
+                user_id=user_id,
+                start_date=start_date,
+                event_types=self.SUCCESS_EVENTS
+            )
 
             # Execute query grouped by date
             results = self.db.query(
@@ -367,7 +414,6 @@ class AccessTrackingService:
             # Convert to dictionary with ISO string keys
             trends = {}
             for result in results:
-                # Parse date string to date object and convert to datetime at start of day
                 date_obj = self._parse_date_string(result.access_date)
                 date_key = datetime.combine(date_obj, datetime.min.time())
                 trends[date_key.isoformat()] = result.access_count
@@ -382,8 +428,8 @@ class AccessTrackingService:
         self,
         vault_id: Optional[int] = None,
         user_id: Optional[int] = None,
-        days: int = 7
-    ) -> Dict[int, int]:
+        days: int = DEFAULT_HOURLY_PATTERN_DAYS
+    ) -> Dict[str, int]:
         """
         Get hourly access patterns for the last N days.
 
@@ -393,24 +439,17 @@ class AccessTrackingService:
             days (int): Number of days to look back
 
         Returns:
-            Dict[int, int]: Dictionary with hour (0-23) as key and access count as value
+            Dict[str, int]: Dictionary with hour (0-23) as key and access count as value
         """
         try:
-            start_date = datetime.utcnow() - timedelta(days=days)
+            start_date = self._get_current_time() - timedelta(days=days)
 
-            # Define access event types (only successful accesses)
-            event_types = [LogEventType.unlock, LogEventType.access_granted]
-
-            # Build query filters
-            filters = [
-                Log.event_type.in_(event_types),
-                Log.created_at >= start_date
-            ]
-
-            if vault_id:
-                filters.append(Log.vault_id == vault_id)
-            if user_id:
-                filters.append(Log.user_id == user_id)
+            filters = self._build_query_filters(
+                vault_id=vault_id,
+                user_id=user_id,
+                start_date=start_date,
+                event_types=self.SUCCESS_EVENTS
+            )
 
             # Execute query grouped by hour
             results = self.db.query(
@@ -439,7 +478,7 @@ class AccessTrackingService:
         user_id: Optional[int] = None,
         start_date: Optional[datetime] = None,
         end_date: Optional[datetime] = None,
-        limit: int = 100
+        limit: int = DEFAULT_FAILED_ATTEMPTS_LIMIT
     ) -> List[Dict]:
         """
         Get failed access attempts for security monitoring.
@@ -455,17 +494,13 @@ class AccessTrackingService:
             List[Dict]: List of failed access attempts with details
         """
         try:
-            # Build query filters
-            filters = [Log.event_type == LogEventType.failed_attempt]
-
-            if vault_id:
-                filters.append(Log.vault_id == vault_id)
-            if user_id:
-                filters.append(Log.user_id == user_id)
-            if start_date:
-                filters.append(Log.created_at >= start_date)
-            if end_date:
-                filters.append(Log.created_at <= end_date)
+            filters = self._build_query_filters(
+                vault_id=vault_id,
+                user_id=user_id,
+                start_date=start_date,
+                end_date=end_date,
+                event_types=[LogEventType.failed_attempt]
+            )
 
             # Execute query
             results = self.db.query(Log).filter(
@@ -474,7 +509,7 @@ class AccessTrackingService:
                 Log.created_at.desc()
             ).limit(limit).all()
 
-            # Convert to dictionaries with user information
+            # Convert to dictionaries
             failed_attempts = []
             for log in results:
                 attempt = {
@@ -511,18 +546,206 @@ class AccessTrackingService:
             Optional[datetime]: Timestamp of last access, or None if no access found
         """
         try:
-            # Query for the most recent successful access log for this user-vault pair
+            # Primary query: exact success events match
             result = self.db.query(Log.created_at).filter(
                 Log.user_id == user_id,
                 Log.vault_id == vault_id,
                 Log.event_type.in_(self.SUCCESS_EVENTS)
             ).order_by(Log.created_at.desc()).first()
 
-            return result.created_at if result else None
+            if result:
+                self.logger.debug(f"Found last access for user {user_id} in vault {vault_id}: {result.created_at}")
+                return result.created_at
+
+            # Fallback 1: Include unlock_confirm
+            result = self.db.query(Log.created_at).filter(
+                Log.user_id == user_id,
+                Log.vault_id == vault_id,
+                Log.event_type.in_([LogEventType.unlock, LogEventType.access_granted, LogEventType.unlock_confirm])
+            ).order_by(Log.created_at.desc()).first()
+
+            if result:
+                self.logger.debug(f"Found last access (fallback) for user {user_id} in vault {vault_id}: {result.created_at}")
+                return result.created_at
+
+            # Fallback 2: Any access-related event (exclude non-access events)
+            result = self.db.query(Log.created_at).filter(
+                Log.user_id == user_id,
+                Log.vault_id == vault_id,
+                ~Log.event_type.in_([LogEventType.disconnected, LogEventType.alarm])
+            ).order_by(Log.created_at.desc()).first()
+
+            if result:
+                self.logger.debug(f"Found last activity (final fallback) for user {user_id} in vault {vault_id}: {result.created_at}")
+                return result.created_at
+
+            self.logger.debug(f"No access logs found for user {user_id} in vault {vault_id}")
+            return None
 
         except Exception as e:
             self.logger.error(f"Error getting last access timestamp for user {user_id} in vault {vault_id}: {str(e)}")
             raise
+
+    def _calculate_date_range(
+        self,
+        start_date: Optional[datetime],
+        end_date: Optional[datetime],
+        days: Optional[int]
+    ) -> Tuple[datetime, datetime]:
+        """
+        Calculate date range for queries.
+        
+        Args:
+            start_date: Optional provided start date
+            end_date: Optional provided end date
+            days: Optional number of days to look back
+            
+        Returns:
+            Tuple of (start_date, end_date)
+        """
+        if start_date and end_date:
+            return start_date, end_date
+            
+        end_date_calc = self._get_current_time()
+        
+        if days:
+            start_date_calc = end_date_calc - timedelta(days=days)
+        else:
+            start_date_calc = end_date_calc - timedelta(days=DEFAULT_TREND_DAYS)
+            
+        return start_date_calc, end_date_calc
+
+    def _build_activity_from_log(self, log: Log, activity_type: str) -> Dict[str, Any]:
+        """
+        Build activity dictionary from log entry.
+        
+        Args:
+            log: Log entry
+            activity_type: Type of activity ('success' or 'failed')
+            
+        Returns:
+            Activity dictionary
+        """
+        username = self._extract_username(log)
+        
+        activity_config = {
+            'success': {
+                'title': 'Successful Access',
+                'description': 'Vault accessed successfully'
+            },
+            'failed': {
+                'title': 'Failed Access Attempt',
+                'description': 'Unauthorized access attempt detected'
+            }
+        }
+        
+        config = activity_config.get(activity_type, activity_config['success'])
+        
+        return {
+            'id': log.id,
+            'type': activity_type,
+            'title': config['title'],
+            'description': config['description'],
+            'timestamp': log.created_at.isoformat(),
+            'user': username,
+            'event_type': log.event_type.value,
+            'details': log.details
+        }
+
+    def _get_recent_logs_by_type(
+        self,
+        event_types: List[LogEventType],
+        vault_id: Optional[int],
+        days: int,
+        limit: int,
+        join_user: bool = True
+    ) -> List[Log]:
+        """
+        Get recent logs filtered by event types.
+        
+        Args:
+            event_types: List of event types to filter
+            vault_id: Optional vault ID filter
+            days: Number of days to look back
+            limit: Maximum number of results
+            join_user: Whether to join User table
+            
+        Returns:
+            List of Log entries
+        """
+        cutoff_date = self._get_current_time() - timedelta(days=days)
+        
+        filters = [
+            Log.event_type.in_(event_types),
+            Log.created_at >= cutoff_date
+        ]
+        
+        if vault_id:
+            filters.append(Log.vault_id == vault_id)
+        
+        query = self.db.query(Log)
+        if join_user:
+            query = query.join(Log.user)
+        else:
+            query = query.outerjoin(Log.user)
+            
+        return query.filter(
+            and_(*filters)
+        ).order_by(Log.created_at.desc()).limit(limit).all()
+
+    def get_recent_activity(
+        self,
+        vault_id: Optional[int] = None,
+        limit: int = DEFAULT_RECENT_ACTIVITY_LIMIT
+    ) -> List[Dict[str, Any]]:
+        """
+        Get recent activity for the activity feed, including both successful unlocks and failed attempts.
+
+        Args:
+            vault_id (Optional[int]): Specific vault ID to filter by
+            limit (int): Maximum number of activities to return
+
+        Returns:
+            List[Dict]: List of recent activities formatted for the activity feed
+        """
+        try:
+            # Get recent successful and failed logs
+            success_limit = limit // 2
+            failed_limit = limit // 2
+            
+            success_logs = self._get_recent_logs_by_type(
+                self.SUCCESS_EVENTS,
+                vault_id,
+                DEFAULT_RECENT_ACTIVITY_DAYS,
+                success_limit,
+                join_user=True
+            )
+            
+            failed_logs = self._get_recent_logs_by_type(
+                self.FAILED_EVENTS,
+                vault_id,
+                DEFAULT_RECENT_ACTIVITY_DAYS,
+                failed_limit,
+                join_user=False
+            )
+
+            # Convert to activity format
+            activities = []
+            for log in success_logs:
+                activities.append(self._build_activity_from_log(log, 'success'))
+            
+            for log in failed_logs:
+                activities.append(self._build_activity_from_log(log, 'failed'))
+
+            # Sort by timestamp (most recent first)
+            activities.sort(key=lambda x: x['timestamp'], reverse=True)
+
+            # Return only the requested limit
+            return activities[:limit]
+
+        except Exception as e:
+            self.logger.error(f"Error getting recent activity: {str(e)}")
+            return []
 
     def get_access_summary(
         self,
@@ -540,87 +763,69 @@ class AccessTrackingService:
             user_id (Optional[int]): Specific user ID to filter by
             start_date (Optional[datetime]): Start date for filtering
             end_date (Optional[datetime]): End date for filtering
+            days (Optional[int]): Number of days to look back if dates not provided
 
         Returns:
             Dict: Comprehensive access summary
         """
         try:
-            # Log the request parameters for debugging
             self.logger.info(f"get_access_summary called with vault_id={vault_id}, user_id={user_id}, start_date={start_date}, end_date={end_date}, days={days}")
 
-            # Calculate date range if not provided
-            if not start_date or not end_date:
-                # Use local time for consistency with log creation (Model.py uses datetime.now() which is local)
-                if days:
-                    end_date_calc = datetime.now()  # Local time
-                    start_date_calc = end_date_calc - timedelta(days=days)
-                    self.logger.info(f"Calculated date range using days={days}: start_date={start_date_calc}, end_date={end_date_calc}")
-                else:
-                    end_date_calc = datetime.now()  # Local time
-                    start_date_calc = end_date_calc - timedelta(days=7)  # Default 7 days
-                    self.logger.info(f"Calculated default date range using local time: start_date={start_date_calc}, end_date={end_date_calc}")
-                start_date = start_date or start_date_calc
-                end_date = end_date or end_date_calc
-            else:
-                self.logger.info(f"Using provided date range: start_date={start_date} ({start_date.tzinfo if hasattr(start_date, 'tzinfo') else 'naive'}), end_date={end_date} ({end_date.tzinfo if hasattr(end_date, 'tzinfo') else 'naive'})")
+            # Calculate date range
+            start_date, end_date = self._calculate_date_range(start_date, end_date, days)
+            self.logger.info(f"Using date range: start_date={start_date}, end_date={end_date}")
 
             # Get successful accesses
-            self.logger.info(f"Getting successful accesses for vault_id={vault_id}, start_date={start_date}, end_date={end_date}")
             successful_accesses = self.get_access_count_by_vault(
                 vault_id=vault_id,
                 start_date=start_date,
                 end_date=end_date,
                 include_failed=False
             )
-            self.logger.info(f"Successful accesses result: {successful_accesses}")
 
             # Get failed attempts
-            self.logger.info(f"Getting failed attempts for vault_id={vault_id}, user_id={user_id}, start_date={start_date}, end_date={end_date}")
             failed_attempts_list = self.get_failed_access_attempts(
                 vault_id=vault_id,
                 user_id=user_id,
                 start_date=start_date,
                 end_date=end_date,
-                limit=1000  # High limit to get all in period
+                limit=HIGH_FAILED_ATTEMPTS_LIMIT
             )
             failed_attempts = len(failed_attempts_list) if failed_attempts_list else 0
-            self.logger.info(f"Failed attempts count: {failed_attempts}")
+
             # Calculate totals
             successful_count = sum(successful_accesses.values()) if successful_accesses else 0
             total_attempts = successful_count + failed_attempts
             success_rate = (successful_count / total_attempts * 100) if total_attempts > 0 else 0.0
-            self.logger.info(f"Calculated totals: successful_count={successful_count}, failed_attempts={failed_attempts}, total_attempts={total_attempts}, success_rate={success_rate}")
 
             # Get daily trends
-            self.logger.info("Getting daily trends")
+            if days:
+                trend_days = days
+            elif start_date and end_date:
+                trend_days = max(1, (end_date - start_date).days + 1)
+            else:
+                trend_days = DEFAULT_TREND_DAYS
+            
             daily_trends = self.get_daily_access_trends(
                 vault_id=vault_id,
                 user_id=user_id,
-                days=7
+                days=trend_days
             )
-            self.logger.info(f"Daily trends result: {len(daily_trends)} entries")
 
             # Get hourly patterns
-            self.logger.info("Getting hourly patterns")
             hourly_patterns = self.get_hourly_access_patterns(
                 vault_id=vault_id,
                 user_id=user_id,
-                days=7
+                days=DEFAULT_HOURLY_PATTERN_DAYS
             )
-            self.logger.info(f"Hourly patterns result: {len(hourly_patterns)} entries")
 
-            period = {}
-            if start_date:
-                period['start_date'] = start_date.isoformat()
-            if end_date:
-                period['end_date'] = end_date.isoformat()
-
-            # Get recent activity (both successful and failed)
+            # Get recent activity
             recent_activities = self.get_recent_activity(
                 vault_id=vault_id,
-                limit=10
+                limit=DEFAULT_RECENT_ACTIVITY_LIMIT
             )
 
+            # Build result
             result = {
                 'successful_accesses': successful_accesses or {},
                 'failed_attempts': failed_attempts,
@@ -628,106 +833,16 @@ class AccessTrackingService:
                 'success_rate': round(success_rate, 2),
                 'daily_trends': daily_trends or {},
                 'hourly_patterns': hourly_patterns or {},
-                'period': period,
+                'period': {
+                    'start_date': start_date.isoformat(),
+                    'end_date': end_date.isoformat()
+                },
                 'recent_activity': recent_activities
             }
-            self.logger.info(f"Returning access summary: {result}")
+            
+            self.logger.info(f"Returning access summary with {len(daily_trends)} daily trends and {len(recent_activities)} recent activities")
             return result
 
         except Exception as e:
             self.logger.error(f"Error getting access summary: {str(e)}")
             raise
-
-    def get_recent_activity(
-        self,
-        vault_id: Optional[int] = None,
-        limit: int = 10
-    ) -> List[Dict[str, Any]]:
-        """
-        Get recent activity for the activity feed, including both successful unlocks and failed attempts.
-
-        Args:
-            vault_id (Optional[int]): Specific vault ID to filter by
-            limit (int): Maximum number of activities to return
-
-        Returns:
-            List[Dict]: List of recent activities formatted for the activity feed
-        """
-        try:
-            activities = []
-
-            # Get recent successful unlocks with user information
-            success_filters = [
-                Log.event_type.in_(self.SUCCESS_EVENTS),
-                Log.created_at >= datetime.now() - timedelta(days=7)  # Last 7 days
-            ]
-            if vault_id:
-                success_filters.append(Log.vault_id == vault_id)
-
-            success_logs = self.db.query(Log).join(Log.user).filter(  # Join with User table
-                and_(*success_filters)
-            ).order_by(Log.created_at.desc()).limit(limit // 2).all()  # Half for success, half for failed
-
-            # Get recent failed attempts with user information
-            failed_filters = [
-                Log.event_type.in_(self.FAILED_EVENTS),
-                Log.created_at >= datetime.now() - timedelta(days=7)  # Last 7 days
-            ]
-            if vault_id:
-                failed_filters.append(Log.vault_id == vault_id)
-
-            failed_logs = self.db.query(Log).outerjoin(Log.user).filter(  # Left join with User table (failed attempts might not have users)
-                and_(*failed_filters)
-            ).order_by(Log.created_at.desc()).limit(limit // 2).all()  # Half for failed
-
-            # Convert successful logs to activity format
-            for log in success_logs:
-                # Get username from user relationship if available
-                username = 'Unknown User'
-                if log.user and log.user.username:
-                    username = log.user.username
-                elif log.user_id:
-                    username = f'User {log.user_id}'
-
-                activity = {
-                    'id': log.id,
-                    'type': 'success',
-                    'title': 'Successful Access',
-                    'description': f'Vault accessed successfully',
-                    'timestamp': log.created_at.isoformat(),
-                    'user': username,
-                    'event_type': log.event_type.value,
-                    'details': log.details
-                }
-                activities.append(activity)
-
-            # Convert failed logs to activity format
-            for log in failed_logs:
-                # Get username from user relationship if available
-                username = 'Unknown User'
-                if log.user and log.user.username:
-                    username = log.user.username
-                elif log.user_id:
-                    username = f'User {log.user_id}'
-
-                activity = {
-                    'id': log.id,
-                    'type': 'failed',
-                    'title': 'Failed Access Attempt',
-                    'description': f'Unauthorized access attempt detected',
-                    'timestamp': log.created_at.isoformat(),
-                    'user': username,
-                    'event_type': log.event_type.value,
-                    'details': log.details
-                }
-                activities.append(activity)
-
-            # Sort by timestamp (most recent first)
-            activities.sort(key=lambda x: x['timestamp'], reverse=True)
-
-            # Return only the requested limit
-            return activities[:limit]
-
-        except Exception as e:
-            self.logger.error(f"Error getting recent activity: {str(e)}")
-            return []
