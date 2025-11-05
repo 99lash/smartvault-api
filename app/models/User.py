@@ -33,4 +33,11 @@ class User(Model, table=True):
     logs: Optional[List["Log"]] = Relationship(back_populates="user")
     nfc_cards: Optional[List["NfcCard"]] = Relationship(back_populates="user")
     vault_memberships: Optional[List["VaultMembership"]] = Relationship(back_populates="user")
-    sent_invitations: Optional[List["VaultInvitation"]] = Relationship(back_populates="inviter")
+    sent_invitations: Optional[List["VaultInvitation"]] = Relationship(
+        back_populates="inviter",
+        sa_relationship_kwargs={"foreign_keys": "[VaultInvitation.invited_by]"}
+    )
+    received_ownership_invitations: Optional[List["VaultInvitation"]] = Relationship(
+        back_populates="new_owner",
+        sa_relationship_kwargs={"foreign_keys": "[VaultInvitation.new_owner_user_id]"}
+    )

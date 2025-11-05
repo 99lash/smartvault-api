@@ -34,11 +34,13 @@ BUSINESS RULES:
 5. System tracks who created each invitation for audit purposes
 """
 
-from sqlmodel import Field, SQLModel, Relationship, UniqueConstraint
-from typing import Optional, TYPE_CHECKING
-from datetime import datetime, timedelta
 import enum
 import uuid
+
+from .Model import Model
+from sqlmodel import Field, Relationship, UniqueConstraint
+from typing import Optional, TYPE_CHECKING
+from datetime import datetime, timedelta
 
 # Type-only imports to avoid circular dependency issues
 # These are only used for type hints, not at runtime
@@ -73,11 +75,19 @@ class InvitationRole(str, enum.Enum):
     guest = "guest"    # Will grant limited/guest privileges
 
 
+class TransferType(str, enum.Enum):
+    """
+    Defines the type of ownership transfer.
+    """
+    full_transfer = "full_transfer"      # Original owner is removed from the vault
+    shared_access = "shared_access"      # Original owner is demoted to a user role
+
+
 # =============================================================================
 # VAULT INVITATION MODEL
 # =============================================================================
 
-class VaultInvitation(SQLModel, table=True):
+class VaultInvitation(Model, table=True):
     """
     SECURE INVITATION SYSTEM: Manages pending vault memberships.
 
@@ -105,14 +115,6 @@ class VaultInvitation(SQLModel, table=True):
     """
 
     __tablename__ = "vault_invitations"
-
-    # -------------------------------------------------------------------------
-    # PRIMARY KEY
-    # -------------------------------------------------------------------------
-    id: Optional[int] = Field(
-        default=None,
-        primary_key=True,
-    )
 
     # -------------------------------------------------------------------------
     # FOREIGN KEY REFERENCES
@@ -156,11 +158,22 @@ class VaultInvitation(SQLModel, table=True):
     )
 
     # -------------------------------------------------------------------------
-    # AUDIT TIMESTAMPS
+    # OWNERSHIP TRANSFER FIELDS
     # -------------------------------------------------------------------------
-    created_at: datetime = Field(
-        default_factory=datetime.utcnow,
+    is_ownership_transfer: bool = Field(
+        default=False,
         nullable=False,
+    )
+
+    transfer_type: Optional[TransferType] = Field(
+        default=None,
+        nullable=True,
+    )
+
+    new_owner_user_id: Optional[int] = Field(
+        default=None,
+        foreign_key="users.id",
+        nullable=True,
     )
 
     # -------------------------------------------------------------------------
@@ -184,6 +197,12 @@ class VaultInvitation(SQLModel, table=True):
 
     inviter: Optional["User"] = Relationship(
         back_populates="sent_invitations",
+        sa_relationship_kwargs={"foreign_keys": "[VaultInvitation.invited_by]"}
+    )
+
+    new_owner: Optional["User"] = Relationship(
+        back_populates="received_ownership_invitations",
+        sa_relationship_kwargs={"foreign_keys": "[VaultInvitation.new_owner_user_id]"}
     )
 
     # -------------------------------------------------------------------------

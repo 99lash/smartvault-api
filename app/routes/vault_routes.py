@@ -6,7 +6,7 @@ from app.services.vaults.VaultService import VaultService
 from app.services.vaults.VaultMembershipService import VaultMembershipService
 from app.services.users.UserService import UserService
 from app.models.VaultMembership import MembershipRole
-from app.schemas.vault import VaultCreate, UpdateVaultStatus, VaultRead
+from app.schemas.vault import VaultCreate, UpdateVaultStatus, VaultRead, VaultTransferInitiate, VaultTransferAccept
 from app.schemas.Response import Response
 from app.core.dependencies import get_current_admin, get_current_user;
 
@@ -121,6 +121,61 @@ def get_vault(vault_id: int, db: Session = Depends(get_db), current_user = Depen
     if not vault:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vault not found")
     return vault
+
+# -----------------------------
+# Initiate vault ownership transfer
+# -----------------------------
+@router.post("/{vault_id}/transfer/initiate", response_model=Response, status_code=status.HTTP_202_ACCEPTED)
+def initiate_vault_ownership_transfer(
+    vault_id: int,
+    payload: VaultTransferInitiate,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    """
+    Initiate the transfer of vault ownership to another user.
+    The current user must be the owner (admin) of the vault.
+    """
+    service = VaultService(db)
+    try:
+        service.initiate_ownership_transfer(
+            vault_id=vault_id,
+            current_owner_id=current_user.id,
+            new_owner_user_id=payload.new_owner_user_id,
+            transfer_type=payload.transfer_type
+        )
+        return Response(success=True, detail="Ownership transfer initiated successfully. Awaiting acceptance by new owner.")
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to initiate ownership transfer: {str(e)}")
+
+# -----------------------------
+# Accept vault ownership transfer
+# -----------------------------
+@router.post("/{vault_id}/transfer/accept", response_model=Response, status_code=status.HTTP_200_OK)
+def accept_vault_ownership_transfer(
+    vault_id: int,
+    payload: VaultTransferAccept,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    """
+    Accept the transfer of vault ownership.
+    The current user must be the designated new owner in the invitation.
+    """
+    service = VaultService(db)
+    try:
+        service.accept_ownership_transfer(
+            vault_id=vault_id,
+            new_owner_user_id=current_user.id,
+            invite_code=payload.invite_code
+        )
+        return Response(success=True, detail="Vault ownership transferred successfully.")
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to accept ownership transfer: {str(e)}")
 
 # -----------------------------
 # Soft delete a vault

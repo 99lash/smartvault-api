@@ -21,6 +21,29 @@ class VaultMembershipRepository(Repository):
             .first()
         )
 
+    def get_membership_by_user_and_vault(self, user_id: int, vault_id: int) -> Optional[VaultMembership]:
+        """
+        Alias for get_by_user_and_vault to match service layer naming.
+        """
+        return self.get_by_user_and_vault(user_id, vault_id)
+
+    def update_membership_role(self, membership_id: int, new_role: MembershipRole) -> Optional[VaultMembership]:
+        membership = self.get_by_id(membership_id)
+        if membership:
+            membership.role = new_role
+            self.db.add(membership)
+            self.db.commit()
+            self.db.refresh(membership)
+        return membership
+
+    def delete_membership(self, membership_id: int) -> bool:
+        membership = self.get_by_id(membership_id)
+        if membership:
+            self.db.delete(membership)
+            self.db.commit()
+            return True
+        return False
+
     def get_user_memberships(self, user_id: int) -> List[VaultMembership]:
         return self.db.query(self.model).filter(self.model.user_id == user_id).all()
 

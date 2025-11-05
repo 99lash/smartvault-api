@@ -20,6 +20,8 @@ class LogEventType(str, enum.Enum):
     access_granted = "access_granted"
     connected = "connected"
     unlock_confirm = "unlock_confirm"
+    ownership_transfer_initiated = "ownership_transfer_initiated"
+    ownership_transfer_accepted = "ownership_transfer_accepted"
     
 
 # Log model

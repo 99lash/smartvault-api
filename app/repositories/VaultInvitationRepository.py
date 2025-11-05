@@ -46,8 +46,8 @@ INTEGRATION POINTS:
 
 from sqlalchemy.orm import Session
 from typing import List, Optional
-from datetime import datetime
-from app.models.VaultInvitation import VaultInvitation, InvitationRole
+from datetime import datetime, timedelta
+from app.models.VaultInvitation import VaultInvitation, InvitationRole, TransferType
 from .Repository import Repository
 
 
@@ -233,6 +233,35 @@ class VaultInvitationRepository(Repository):
             .all()
         )
 
+    def get_pending_ownership_transfer_invitation(self, vault_id: int) -> Optional[VaultInvitation]:
+        """
+        Get a pending ownership transfer invitation for a specific vault.
+        """
+        current_time = datetime.utcnow()
+        return (
+            self.db.query(self.model)
+            .filter(
+                self.model.vault_id == vault_id,
+                self.model.is_ownership_transfer == True,
+                self.model.accepted == False,
+                self.model.expires_at > current_time
+            )
+            .first()
+        )
+
+    def get_ownership_transfer_invitation_by_code(self, invite_code: str) -> Optional[VaultInvitation]:
+        """
+        Get an ownership transfer invitation by its invite code.
+        """
+        return (
+            self.db.query(self.model)
+            .filter(
+                self.model.invite_code == invite_code,
+                self.model.is_ownership_transfer == True
+            )
+            .first()
+        )
+
     def get_expired_invitations(self) -> List[VaultInvitation]:
         """
         SYSTEM MAINTENANCE: Find invitations that have expired.
@@ -264,7 +293,7 @@ class VaultInvitationRepository(Repository):
     # INVITATION LIFECYCLE OPERATIONS
     # -------------------------------------------------------------------------
 
-    def mark_invitation_accepted(self, invite_code: str) -> Optional[VaultInvitation]:
+    def mark_invitation_accepted(self, invitation_id: int) -> Optional[VaultInvitation]:
         """
         INVITATION ACCEPTANCE: Mark invitation as used and return it.
 
@@ -298,7 +327,7 @@ class VaultInvitationRepository(Repository):
         ---------------
         Service layer will use this invitation to create a VaultMembership record.
         """
-        invitation = self.get_by_invite_code(invite_code)
+        invitation = self.get_by_id(invitation_id)
         if invitation and not invitation.accepted and not invitation.is_expired():
             invitation.accepted = True
             self.db.commit()
@@ -419,6 +448,25 @@ class VaultInvitationRepository(Repository):
             expires_at=expires_at
         )
 
+        self.db.add(invitation)
+        self.db.commit()
+        self.db.refresh(invitation)
+        return invitation
+
+    def create_ownership_transfer_invitation(self, vault_id: int, invited_by: int, new_owner_user_id: int, transfer_type: TransferType) -> VaultInvitation:
+        """
+        Create a new ownership transfer invitation.
+        """
+        expires_at = datetime.utcnow() + timedelta(days=1) # Ownership transfer invitations expire in 1 day
+        invitation = VaultInvitation(
+            vault_id=vault_id,
+            invited_by=invited_by,
+            new_owner_user_id=new_owner_user_id,
+            role=InvitationRole.admin,
+            is_ownership_transfer=True,
+            transfer_type=transfer_type,
+            expires_at=expires_at
+        )
         self.db.add(invitation)
         self.db.commit()
         self.db.refresh(invitation)

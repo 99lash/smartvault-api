@@ -3,6 +3,7 @@ from datetime import datetime
 from typing import Optional
 from pydantic import Field
 from app.models.Vault import VaultStatus
+from app.models.VaultInvitation import TransferType
 
 # ----------------------------
 # Vault HTTP Request Schemas
@@ -21,6 +22,13 @@ class VaultCreate(SQLModel, table=False):
 
 class UpdateVaultStatus(SQLModel, table=False):
     status: VaultStatus
+
+class VaultTransferInitiate(SQLModel, table=False):
+    new_owner_user_id: int = Field(..., description="ID of the user to transfer ownership to")
+    transfer_type: TransferType = Field(..., description="Type of ownership transfer (full_transfer or shared_access)")
+
+class VaultTransferAccept(SQLModel, table=False):
+    invite_code: str = Field(..., description="Unique invitation code for ownership transfer")
 
 # ----------------------------
 # Vault HTTP Response Schemas
